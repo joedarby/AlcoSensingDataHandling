@@ -64,20 +64,18 @@ print(didntDrink)
 
 '''
 
-user = db.users.find_one({"body.age":27})
+user = db.users.find_one({"body.age":26})
 user_id = user["_id"]
 print(user["body"]["email"])
 
 
-data = db.data.find_one({"sensorType":"Audio", "user":user_id})
+data = db.data.find_one({"sensorType":"Accelerometer", "user":user_id})
 pprint(data)
 period = data["period"]
-sensor = data["sensorType"]
 pprint(period)
-pprint(sensor)
 
-df = Data_Tools.get_file_as_df(db, period, sensor)
+df = Data_Tools.get_all_data_for_period(db, period)
 
-#pprint(df)
+pprint(df)
 
-Data_Tools.plot_file_data(df, 1)
+#Data_Tools.plot_file_data(df, "Accel_x")
