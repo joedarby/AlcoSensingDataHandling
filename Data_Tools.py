@@ -60,7 +60,7 @@ def get_all_data_for_period(db, sensingPeriod):
             if sub_df is not None:
                 main_df = pd.merge(main_df, sub_df, how='outer', left_index=True, right_index=True)
 
-    decide_if_walking(main_df)
+    label_walking(main_df)
 
     return main_df
 
@@ -79,11 +79,11 @@ def calc_accelerometer_magnitude(df):
 
 def get_motion_activity(db, sensingPeriod):
     df = get_file_as_df(db, sensingPeriod, "MotionActivity")
-    decide_if_walking(df)
+    label_walking(df)
     print(df)
     return df
 
-def decide_if_walking(df):
+def label_walking(df):
     df['Motion_activity'].fillna((-1), inplace=True)
     df.loc[df['Motion_activity'] == 7, 'Motion_walking'] = True
     df.loc[(df['Motion_activity'] != 7) & (df['Motion_activity'] >= 0), 'Motion_walking'] = False
@@ -111,12 +111,10 @@ def filter_steps(row, df):
                 break
     return row
 
-def plot_file_data(dataframe, column, ms):
-    times = dataframe.index.values
-    vals = dataframe[column].values
-    labels = dataframe["step"].values
-    #print(times)
-    #print(vals)
+def plot_labelled_steps(df):
+    times = df.index.values
+    vals = df["Accel_mag"].values
+    labels = df["step"].values
 
     fig, ax = plt.subplots()
     ax.plot(times,vals)
@@ -125,6 +123,13 @@ def plot_file_data(dataframe, column, ms):
         if label == True:
             ax.annotate("s", (times[i], vals[i]))
 
+    plt.show()
+
+def plot_general(df, column):
+    times = df.index.values
+    vals = df[column].values
+
+    plt.plot(times, vals)
     plt.show()
 
 

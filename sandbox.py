@@ -71,20 +71,17 @@ for user in db.users.find():
 print(didDrink)
 print(didntDrink)
 
+
 '''
 
 
-user = db.users.find_one({"body.age":26})
-user_id = user["_id"]
-print(user["body"]["email"])
 
+period = db.sensingperiods.find_one({"completeMotionData": True})
+print(period)
+id = period["_id"]
 
-data = db.data.find_one({"sensorType":"Accelerometer", "user":user_id})
-pprint(data)
-period = data["period"]
-pprint(period)
-
-df_walking = Data_Tools.get_step_labelled_walking_data(db, period)
+df = Data_Tools.get_all_data_for_period(db, id)
+df_walking = Data_Tools.get_step_labelled_walking_data(db, id)
 
 
 
@@ -95,7 +92,9 @@ df_walking = Data_Tools.get_step_labelled_walking_data(db, period)
 #df_accel = Data_Tools.get_accelerometer(db, period)
 
 #Data_Tools.plot_file_data(df_motion, "walking", 1)
-Data_Tools.plot_file_data(df_walking, "Accel_mag", 0.1)
+Data_Tools.plot_general(df, "Accel_mag")
+Data_Tools.plot_labelled_steps(df_walking)
+
 
 
 

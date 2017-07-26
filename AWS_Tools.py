@@ -1,6 +1,8 @@
 import json
 import os
 from pprint import pprint
+import gzip
+import csv
 
 
 def update_users(dataBucket, db):
@@ -87,6 +89,73 @@ def update_survey_info(db):
                 db.sensingperiods.update_one({"_id": periodID}, {"$set": {"survey": None}}, upsert=False)
         pprint(db.sensingperiods.find_one({"_id": period["_id"]}))
         print("\n")
+
+def check_data_complete(db):
+    path = "/home/joe/dev/MSc/data/"
+    for period in db.sensingperiods.find():
+        periodID = period["_id"]
+        user = period["user"]
+        time = period["startTime"]
+        if "completeData" not in period.keys():
+            directory = path + user + "/" + time
+            list = os.listdir(directory)
+            dataOK = filesOK(list, directory)
+            motionDataOK = motionFilesOK(list, directory)
+            if dataOK:
+                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeData": True}},
+                                             upsert=False)
+            else:
+                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeData": False}},
+                                             upsert=False)
+            if motionDataOK:
+                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeMotionData": True}},
+                                             upsert=False)
+            else:
+                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeMotionData": False}},
+                                             upsert=False)
+            print(periodID, dataOK, period["completeData"])
+
+def filesOK(list, directory):
+    if len(list) < 9:
+        return False
+    if len(list) >= 9:
+        for file in list:
+            if file[-6:] == "csv.gz":
+                filePath = directory + "/" + file
+                if get_file_length(filePath) < 5:
+                    print(file + "has " + str(get_file_length(filePath)) + " rows")
+                    return False
+    return True
+
+def motionFilesOK(list, directory):
+    accelOK = False
+    motionOK = False
+    for file in list:
+        filePath = directory + "/" + file
+        if "Accelerometer" in file:
+            if get_file_length(filePath) > 100:
+                accelOK = True
+        if "MotionActivity" in file:
+            if get_file_length(filePath) > 10:
+                motionOK = True
+    return motionOK and accelOK
+
+
+def get_file_length(filePath):
+    with gzip.open(filePath, 'r') as f:
+        row_count = sum(1 for line in f)
+    return row_count
+
+
+
+
+
+
+
+
+
+
+
 
 
 
