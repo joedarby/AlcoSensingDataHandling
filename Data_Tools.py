@@ -1,6 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from pprint import pprint
+import datetime as dt
 
 
 def get_file_as_df(db, sensingPeriod, sensor):
@@ -87,6 +88,28 @@ def decide_if_walking(df):
     df.loc[df['Motion_activity'] == 7, 'Motion_walking'] = True
     df.loc[(df['Motion_activity'] != 7) & (df['Motion_activity'] >= 0), 'Motion_walking'] = False
     df['Motion_walking'].fillna(method='ffill', inplace=True)
+
+def get_step_labelled_walking_data(db, sensingPeriod):
+    df = get_all_data_for_period(db, sensingPeriod)
+    df_walking = df[df["Motion_walking"] == True]
+    df_walking = df_walking.dropna(subset=["Accel_mag"])
+    df_walking["rolling_std_dev"] = pd.rolling_std(df_walking["Accel_mag"], 50)
+    df_walking["step"] = df_walking["Accel_mag"] < (df_walking["Accel_mag_avg"] - (1.3 * df_walking["rolling_std_dev"]))
+    df_walking = df_walking.apply(lambda row: filter_steps(row, df_walking), axis=1)
+
+    return df_walking
+
+
+def filter_steps(row, df):
+    time = row.name + dt.timedelta(milliseconds=0.01)
+    time_plus_half_sec = time + dt.timedelta(milliseconds=250)
+    if row["step"]:
+        sub_df = df[time : time_plus_half_sec]
+        for index, sub_row in sub_df.iterrows():
+            if sub_row["step"]:
+                row["step"] = False
+                break
+    return row
 
 def plot_file_data(dataframe, column, ms):
     times = dataframe.index.values
