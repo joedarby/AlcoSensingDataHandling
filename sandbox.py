@@ -1,7 +1,16 @@
 from pymongo import MongoClient
 from pprint import pprint
+import numpy as np
+import pandas as pd
+import datetime as dt
 
+import DB_Tools
 import Data_Tools
+import AWS_Tools
+
+np.set_printoptions(linewidth=640)
+pd.set_option('display.max_columns', 500)
+pd.set_option('display.width', 1000)
 
 dbClient = MongoClient()
 db = dbClient.alcosensing
@@ -64,6 +73,7 @@ print(didntDrink)
 
 '''
 
+
 user = db.users.find_one({"body.age":26})
 user_id = user["_id"]
 print(user["body"]["email"])
@@ -76,6 +86,49 @@ pprint(period)
 
 df = Data_Tools.get_all_data_for_period(db, period)
 
-pprint(df)
 
-#Data_Tools.plot_file_data(df, "Accel_x")
+
+df_walking = df[df["Motion_walking"] == True]
+df_walking = df_walking.dropna(subset=["Accel_mag"])
+
+start = df_walking.head(1).index.values[0]
+milli = 1000000
+end = df_walking.tail(1).index.values[0]
+length = end - start
+
+def filter_steps(row):
+    time = row.name + dt.timedelta(milliseconds=0.01)
+    time_plus_half_sec = time + dt.timedelta(milliseconds=1000)
+    if row["step"]:
+        sub_df = df_walking[time : time_plus_half_sec]
+        if True in sub_df["step"]:
+            row["step"] = False
+        else:
+            row["step"] = True
+
+
+df_walking["rolling_std_dev"] = pd.rolling_std(df_walking["Accel_mag"], 50)
+df_walking["step"] = df_walking["Accel_mag"] < (df_walking["Accel_mag_avg"] - (1.3 * df_walking["rolling_std_dev"]))
+df_walking.apply(lambda row: filter_steps(row), axis=1)
+
+print(df_walking)
+
+
+
+
+#df_motion = Data_Tools.get_motion_activity(db, period)
+#df_accel = Data_Tools.get_accelerometer(db, period)
+
+#Data_Tools.plot_file_data(df_motion, "walking", 1)
+Data_Tools.plot_file_data(df_walking, "Accel_mag", 0.1)
+
+
+
+
+
+
+
+
+
+
+

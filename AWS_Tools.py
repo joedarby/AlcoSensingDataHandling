@@ -1,6 +1,6 @@
 import json
-from pprint import pprint
 import os
+from pprint import pprint
 
 
 def update_users(dataBucket, db):

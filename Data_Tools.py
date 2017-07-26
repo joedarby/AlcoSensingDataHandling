@@ -12,6 +12,7 @@ def get_file_as_df(db, sensingPeriod, sensor):
 
         if sensor == 'Accelerometer':
             df.columns = ["Accel_x (N)", "Accel_y (N)", "Accel_z (N)"]
+            calc_accelerometer_magnitude(df)
 
         elif sensor == 'Audio':
             df.columns = ["Audio"]
@@ -58,17 +59,49 @@ def get_all_data_for_period(db, sensingPeriod):
             if sub_df is not None:
                 main_df = pd.merge(main_df, sub_df, how='outer', left_index=True, right_index=True)
 
-    print(main_df)
+    decide_if_walking(main_df)
 
+    return main_df
 
+def get_accelerometer(db, sensingPeriod):
+    df = get_file_as_df(db, sensingPeriod, "Accelerometer")
+    calc_accelerometer_magnitude(df)
+    print (df)
+    return df
 
-def plot_file_data(dataframe, column):
+def calc_accelerometer_magnitude(df):
+    df["sq_rt_sum_sq"] = (df["Accel_x (N)"] **2 + df["Accel_y (N)"] ** 2 + df["Accel_z (N)"] ** 2)**(1/2)
+    window = 50
+    df["rolling_avg"] = (pd.rolling_sum(df["sq_rt_sum_sq"], window)) / window
+    df["Accel_mag"] = df["sq_rt_sum_sq"] - df["rolling_avg"]
+    df["Accel_mag_avg"] = (pd.rolling_sum(df["Accel_mag"], window)) / window
+
+def get_motion_activity(db, sensingPeriod):
+    df = get_file_as_df(db, sensingPeriod, "MotionActivity")
+    decide_if_walking(df)
+    print(df)
+    return df
+
+def decide_if_walking(df):
+    df['Motion_activity'].fillna((-1), inplace=True)
+    df.loc[df['Motion_activity'] == 7, 'Motion_walking'] = True
+    df.loc[(df['Motion_activity'] != 7) & (df['Motion_activity'] >= 0), 'Motion_walking'] = False
+    df['Motion_walking'].fillna(method='ffill', inplace=True)
+
+def plot_file_data(dataframe, column, ms):
     times = dataframe.index.values
     vals = dataframe[column].values
+    labels = dataframe["step"].values
     #print(times)
     #print(vals)
 
-    plt.plot(times, vals, '+', ms=0.1)
+    fig, ax = plt.subplots()
+    ax.plot(times,vals)
+
+    for i, label in enumerate(labels):
+        if label == True:
+            ax.annotate("s", (times[i], vals[i]))
+
     plt.show()
 
 
