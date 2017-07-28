@@ -2,6 +2,8 @@ from pymongo import MongoClient
 from pprint import pprint
 import numpy as np
 import pandas as pd
+from multiprocessing import Pool
+import random
 
 
 import DB_Tools
@@ -13,8 +15,7 @@ pd.set_option('display.max_columns', 500)
 pd.set_option('display.width', 1000)
 
 
-dbClient = MongoClient()
-db = dbClient.alcosensing
+
 
 '''
 
@@ -77,50 +78,78 @@ print(didntDrink)
 
 
 #period = db.sensingperiods.find_one({"$and": [{"completeMotionData": True}, {"user": "3fe685bc17774888"}]})
+'''
 period = db.sensingperiods.find_one({"completeMotionData": True})
-print(period)
 id = period["_id"]
+dfs_walking, dfs_non_walking = Data_Tools.get_data_split_by_walking(db, id)
+walking_data = Data_Tools.get_walking_statistics(dfs_walking)
+summary_df = pd.DataFrame(walking_data)
+print(summary_df)
+
+'''
+
+dbClient = MongoClient()
+db = dbClient.alcosensing
+
+def main():
+    periods = db.sensingperiods.find({"completeMotionData": True})
+    sample_periods = []
+    for period in periods:
+        num = random.uniform(0,1)
+        if num >0:
+            sample_periods.append(period)
+    pool = Pool()
+    results = pool.map(get_stats_wrapped, sample_periods)
+    pool.close()
+    pool.join()
+
+    df = pd.concat(results)
+    df = df[df["cadence"] < 9999]
+
+    df_no_drink = df[df["didDrink"] == False]
+    df_moderate_drink = df[(df["didDrink"] == True) & (df["drinkFeeling"] < 2)]
+    df_high_drink = df[(df["didDrink"] == True) & (df["drinkFeeling"] >= 2)]
+
+    no_drink_stats = df_no_drink.mean()
+    moderate_drink_stats = df_moderate_drink.mean()
+    high_drink_stats = df_high_drink.mean()
+
+    stats = pd.concat([no_drink_stats, moderate_drink_stats, high_drink_stats], axis=1)
+    stats.columns = ["none", "moderate", "high"]
+
+    print(stats)
+
+
+def get_stats_wrapped(period):
+    try:
+        res = get_stats(period)
+        return res
+    except:
+        print("weird error")
+        return None
+
+def get_stats(period):
+    id = period["_id"]
+    dfs_walking, dfs_non_walking = Data_Tools.get_data_split_by_walking(db, id)
+    walking_data = Data_Tools.get_walking_statistics(dfs_walking, period)
+    df = pd.DataFrame(walking_data)
+    print("data processed")
+    return df
+
+
+
+
+if __name__ == '__main__':
+    main()
 
 #df = Data_Tools.get_all_data_for_period(db, id)
 
-dfs_walking, dfs_non_walking = Data_Tools.get_data_split_by_walking(db, id)
-
-walking_data = []
 
 
-for df in dfs_walking:
-    df = Data_Tools.label_anti_steps(df)
-    df_anti = df[df["anti_step"] == True]
-    df_steps = df[df["step"] == True]
-    start = df_steps.head(1).index.get_values()[0]
-    end = df_steps.tail(1).index.get_values()[0]
-    duration = (np.timedelta64(end - start, 's')).astype(int)
 
-    step_count = df["step"].value_counts()[True]
+#Data_Tools.plot_labelled_steps(df)
 
-    cadence = step_count / duration
 
-    df_steps["step_time"] = df_steps.index.to_series().diff().astype('timedelta64[ms]')
-    df_steps["step_time"] = np.where((df_steps["step_time"] < 2000), df_steps["step_time"], -1)
-    df_steps["step_time"].fillna((-1), inplace=True)
-
-    average_step_time = df_steps[df_steps["step_time"] > 0]["step_time"].mean() / 1000
-    average_gait_stretch = df_anti["gait_stretch"].mean()
-
-    skewness = df["Accel_mag"].skew()
-    kurtosis = df["Accel_mag"].kurtosis()
-
-    walking_data.append({"duration": duration,
-                         "step_count": step_count,
-                         "cadence": cadence,
-                         "step_time": average_step_time,
-                         "gait_stretch": average_gait_stretch,
-                         "skewness": skewness,
-                         "kurtosis":kurtosis})
-    #Data_Tools.plot_labelled_steps(df)
-
-pprint(walking_data)
-print("\n")
 
 #df_walking = Data_Tools.get_step_labelled_walking_data(db, id)
 #print(df_walking)
