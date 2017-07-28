@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from pprint import pprint
 import datetime as dt
@@ -12,7 +13,7 @@ def get_file_as_df(db, sensingPeriod, sensor):
         df = pd.read_csv(file_path, index_col=0, header=None)
 
         if sensor == 'Accelerometer':
-            df.columns = ["Accel_x (N)", "Accel_y (N)", "Accel_z (N)"]
+            df.columns = ["Accel_x (ms-2)", "Accel_y (ms-2)", "Accel_z (ms-2)"]
             calc_accelerometer_magnitude(df)
 
         elif sensor == 'Audio':
@@ -42,7 +43,11 @@ def get_file_as_df(db, sensingPeriod, sensor):
         # print(df.describe())
         return df
 
-    except:
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        message = template.format(type(ex).__name__, ex.args)
+        print(message)
+        print(file_path)
         print (sensor + " empty")
 
         return None
@@ -55,7 +60,7 @@ def get_all_data_for_period(db, sensingPeriod):
 
     for sensorRecord in db.data.find({"period": sensingPeriod}):
         sensor = sensorRecord["sensorType"]
-        if sensor != "Accelerometer":
+        if sensor != "Accelerometer" and sensor != "SurveyResult":
             sub_df = get_file_as_df(db, sensingPeriod, sensor)
             if sub_df is not None:
                 main_df = pd.merge(main_df, sub_df, how='outer', left_index=True, right_index=True)
@@ -73,7 +78,7 @@ def get_accelerometer(db, sensingPeriod):
 
 # Add a gravity normalised magnitude column to the accelerometer dataframe
 def calc_accelerometer_magnitude(df):
-    df["sq_rt_sum_sq"] = (df["Accel_x (N)"] **2 + df["Accel_y (N)"] ** 2 + df["Accel_z (N)"] ** 2)**(1/2)
+    df["sq_rt_sum_sq"] = (df["Accel_x (ms-2)"] **2 + df["Accel_y (ms-2)"] ** 2 + df["Accel_z (ms-2)"] ** 2)**(1/2)
     window = 50
     df["rolling_avg"] = (pd.rolling_sum(df["sq_rt_sum_sq"], window)) / window
     df["Accel_mag"] = df["sq_rt_sum_sq"] - df["rolling_avg"]
@@ -95,17 +100,33 @@ def label_walking(df):
     df['Motion_walking'].fillna(method='ffill', inplace=True)
 
 
-# For a given sensing period, generate the all-data dataframe, then filter out non-walking periods
-# then add a boolean column that labels the steps in the accelerometer data
-def get_step_labelled_walking_data(db, sensingPeriod):
+def get_data_split_by_walking(db, sensingPeriod):
     df = get_all_data_for_period(db, sensingPeriod)
-    df_walking = df[df["Motion_walking"] == True]
-    df_walking = df_walking.dropna(subset=["Accel_mag"])
-    df_walking["rolling_std_dev"] = pd.rolling_std(df_walking["Accel_mag"], 50)
-    df_walking["step"] = df_walking["Accel_mag"] < (df_walking["Accel_mag_avg"] - (1.25 * df_walking["rolling_std_dev"]))
-    df_walking = df_walking.apply(lambda row: filter_steps(row, df_walking), axis=1)
+    dfs = [g for i,g in df.groupby(df['Motion_walking'].ne(df['Motion_walking'].shift()).cumsum())]
+    dfs_walking = []
+    dfs_non_walking = []
+    for d in dfs:
+        start = d.head(1).index.get_values()[0]
+        end = d.tail(1).index.get_values()[0]
+        duration = (np.timedelta64(end - start, 's')).astype(int)
+        if d.iloc[0]['Motion_walking'] and duration > 30:
+            dfs_walking.append(d)
+        else:
+            dfs_non_walking.append(d)
+    for i in range(len(dfs_walking)):
+        dfs_walking[i] = label_steps(dfs_walking[i])
 
-    return df_walking
+    return dfs_walking, dfs_non_walking
+
+
+# Filter out non-accelerometer data and label the steps
+def label_steps(df):
+    df = df.dropna(subset=["Accel_mag"])
+    df["rolling_std_dev"] = pd.rolling_std(df["Accel_mag"], 50)
+    df["step"] = (df["Accel_mag"] < (df["Accel_mag_avg"] - (1.25 * df["rolling_std_dev"]))) & (df["Accel_mag"] < -3)
+    df = df.apply(lambda row: filter_steps(row, df), axis=1)
+
+    return df
 
 # Used by function above to filter out accelerometer peaks which have been labelled as steps but are
 # actually just artifacts (too close to a real step)
@@ -120,19 +141,41 @@ def filter_steps(row, df):
                 break
     return row
 
+def label_anti_steps(df):
+    for index, row in df.iterrows():
+        if row["step"]:
+            time = index + dt.timedelta(milliseconds=0.001)
+            forward_df = df[time:]
+            for index2, row2 in forward_df.iterrows():
+                if row2["step"]:
+                    sub_df = forward_df[index:index2]
+                    max_index = sub_df["Accel_mag"].argmax()
+                    df.loc[max_index, "anti_step"] = True
+                    df.loc[max_index, "gait_stretch"] = df.loc[max_index, "Accel_mag"] - row["Accel_mag"]
+                    break
+    df["anti_step"].fillna(False, inplace=True)
+    df["gait_stretch"].fillna((-1), inplace=True)
+    return df
+
+
 
 #Plot accelerometer data with steps labelled with an 's'
 def plot_labelled_steps(df):
     times = df.index.values
     vals = df["Accel_mag"].values
-    labels = df["step"].values
+    step_labels = df["step"].values
+    anti_step_labels = df["anti_step"].values
 
     fig, ax = plt.subplots()
     ax.plot(times,vals)
 
-    for i, label in enumerate(labels):
+    for i, label in enumerate(step_labels):
         if label == True:
             ax.annotate("s", (times[i], vals[i]))
+
+    for i, label in enumerate(anti_step_labels):
+        if label == True:
+            ax.annotate("x", (times[i], vals[i]))
 
     plt.show()
 
