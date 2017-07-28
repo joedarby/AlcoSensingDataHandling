@@ -75,13 +75,13 @@ print(didntDrink)
 '''
 
 
-
-period = db.sensingperiods.find_one({"completeMotionData": True})
+period = db.sensingperiods.find_one({"$and":[{"completeMotionData": True}, {"user": "3fe685bc17774888"}]})
 print(period)
 id = period["_id"]
 
 df = Data_Tools.get_all_data_for_period(db, id)
 df_walking = Data_Tools.get_step_labelled_walking_data(db, id)
+print(df_walking)
 
 
 
@@ -92,13 +92,15 @@ df_walking = Data_Tools.get_step_labelled_walking_data(db, id)
 #df_accel = Data_Tools.get_accelerometer(db, period)
 
 #Data_Tools.plot_file_data(df_motion, "walking", 1)
-Data_Tools.plot_general(df, "Accel_mag")
-Data_Tools.plot_labelled_steps(df_walking)
+#Data_Tools.plot_general(df, "Accel_mag")
+#Data_Tools.plot_labelled_steps(df_walking)
 
 
+'''
 
+DB_Tools.print_users(db)
 
-
+'''
 
 
 
