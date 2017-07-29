@@ -2,7 +2,7 @@ from pymongo import MongoClient
 import numpy as np
 import pandas as pd
 from pprint import pprint
-
+from random import randint
 import random
 import RandomForest
 from sklearn.metrics import confusion_matrix
@@ -136,11 +136,25 @@ def main():
     accuracies = []
 
     for i in range(10):
-        selected_periods = []
-        for period in validation_data:
-            num = random.uniform(0, 1)
-            if num > 0.5:
-                selected_periods.append(period)
+        drunk_periods = []
+        sober_periods = []
+        data_size = len(validation_data)
+        while len(drunk_periods) < 21:
+            num = randint(0, data_size-1)
+            selection = validation_data[num]
+            if selection[0]["survey"] is not None:
+                if selection[0]["survey"]["feeling"] > 1:
+                    drunk_periods.append(selection)
+        while len(sober_periods) < 21:
+            num = randint(0, data_size-1)
+            selection = validation_data[num]
+            if selection[0]["survey"] is not None:
+                if selection[0]["survey"]["feeling"] <= 1:
+                    sober_periods.append(selection)
+
+        selected_periods = drunk_periods + sober_periods
+
+
         validation_features, validation_targets = extract_data(selected_periods)
         predicted_targets = model.predict(validation_features)
         conf_mat = confusion_matrix(validation_targets, predicted_targets)
@@ -194,7 +208,7 @@ def split_data(db):
                 all_data.append((period, period["gait_stats"].get(key)))
     for data in all_data:
         num = random.uniform(0, 1)
-        if num > 0.4:
+        if num > 0.5:
             training_periods.append(data)
         else:
             validation_periods.append(data)
