@@ -147,6 +147,19 @@ def get_file_length(filePath):
     return row_count
 
 
+def fix_consent(db):
+    users = db.users.find()
+
+    for user in users:
+        id = user["_id"]
+        path = user["consentFilePath"]
+        print(path)
+        with open(path, 'r') as file:
+
+            jsonFile = json.loads(file.read())
+            db.users.update_one({"_id": id}, {"$set": {"body": jsonFile}}, upsert=False)
+
+
 
 
 

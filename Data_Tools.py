@@ -129,7 +129,7 @@ def get_data_split_by_walking(db, sensingPeriod):
     return dfs_walking, dfs_non_walking
 
 
-def get_walking_statistics(dfs, period):
+def get_walking_statistics(dfs, period, userInfo):
     survey = period["survey"]
     didDrink = survey["didDrink"]
     drinkUnits = survey["units"]
@@ -180,7 +180,12 @@ def get_walking_statistics(dfs, period):
                                  "didDrink": didDrink,
                                  "drinkUnits": drinkUnits,
                                  "drinkFeeling": drinkFeeling,
-                                 "drinkRating": drinkRating})
+                                 "drinkRating": drinkRating,
+                                 "user": userInfo["UID"],
+                                 "age": userInfo["age"],
+                                 "height": userInfo["height"],
+                                 "weight": userInfo["weight"],
+                                 "gender": userInfo["gender"]})
 
     return walking_data
 
