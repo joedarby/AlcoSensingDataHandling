@@ -1,15 +1,11 @@
 from pymongo import MongoClient
-from pprint import pprint
 import numpy as np
 import pandas as pd
-from multiprocessing import Pool
+from pprint import pprint
+
 import random
-
-
-import DB_Tools
-import Data_Tools
-import AWS_Tools
 import RandomForest
+from sklearn.metrics import confusion_matrix
 
 np.set_printoptions(linewidth=640)
 pd.set_option('display.max_columns', 500)
@@ -94,6 +90,23 @@ db = dbClient.alcosensing
 
 def main():
 
+    '''
+    periods = db.sensingperiods.find()
+    good = 0
+    no_good = 0
+    sections = 0
+    for period in periods:
+        if "gait_stats" in period.keys():
+            print(period["gait_stats"])
+            good += 1
+            sections += len(period["gait_stats"])
+        else:
+            print("no valid walking sections")
+            no_good += 1
+    print(good, no_good)
+    print(sections)
+    '''
+
     #print(features, targets)
 
     #df_no_drink = df[df["drunk"] == 0]
@@ -112,74 +125,79 @@ def main():
 
     #print(stats)
 
-    training_periods, validation_periods = split_data(db)
-    training_features, training_targets = extract_data(training_periods)
+    training_data, validation_data = split_data(db)
+    training_features, training_targets = extract_data(training_data)
+
+
 
     model = RandomForest.fit_forest(training_features, training_targets)
+
 
     accuracies = []
 
     for i in range(10):
         selected_periods = []
-        for period in validation_periods:
+        for period in validation_data:
             num = random.uniform(0, 1)
             if num > 0.5:
                 selected_periods.append(period)
         validation_features, validation_targets = extract_data(selected_periods)
-        accuracies.append(model.score(validation_features, validation_targets))
+        predicted_targets = model.predict(validation_features)
+        conf_mat = confusion_matrix(validation_targets, predicted_targets)
+        accuracy = model.score(validation_features, validation_targets)
+        result = [conf_mat, accuracy]
 
-    print(accuracies)
+        accuracies.append(result)
+
+    pprint(accuracies)
 
 
 
-def get_stats_wrapped(period):
-    try:
-        res = get_stats(period)
-        return res
-    except Exception as ex:
-        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-        message = template.format(type(ex).__name__, ex.args)
-        print(message)
-        return None
 
-def get_stats(period):
-    id = period["_id"]
-    userID = period["user"]
-    userInfo = db.users.find_one({"_id": userID})["body"]
-    dfs_walking, dfs_non_walking = Data_Tools.get_data_split_by_walking(db, id)
-    walking_data = Data_Tools.get_walking_statistics(dfs_walking, period, userInfo)
-    df = pd.DataFrame(walking_data)
-    print("data processed")
-    return df
+def extract_data(data):
+    data_list = []
+    for d in data:
+        period = d[0]
+        stats = d[1]
 
-def extract_data(periods):
-    pool = Pool()
-    results = pool.map(get_stats_wrapped, periods)
-    pool.close()
-    pool.join()
+        survey = period["survey"]
+        if survey is not None:
+            stats["didDrink"] = survey["didDrink"]
+            stats["drinkUnits"] = survey["units"]
+            stats["drinkFeeling"] = survey["feeling"]
 
-    df = pd.concat(results)
+            data_list.append(stats)
+
+    df = pd.DataFrame(data_list)
+    #print(df)
+
     df = df[df["cadence"] < 9999]
     df = df[df["duration"] > 30]
     df = df[df["step_count"] > 15]
-    df["drunk"] = np.where((df["drinkFeeling"] < 2), 0, 1)
 
+    df["drunk"] = np.where((df["drinkFeeling"] < 2), 0, 1)
 
     features = df.as_matrix(["cadence", "step_time", "gait_stretch", "skewness", "kurtosis"])
     targets = df.as_matrix(["drunk"]).ravel()
 
     return features, targets
 
+
 def split_data(db):
     training_periods = []
     validation_periods = []
+    all_data = []
     periods = db.sensingperiods.find({"completeMotionData": True})
     for period in periods:
+        if "gait_stats" in period.keys():
+            for key in period["gait_stats"].keys():
+                all_data.append((period, period["gait_stats"].get(key)))
+    for data in all_data:
         num = random.uniform(0, 1)
-        if num > 0.3:
-            training_periods.append(period)
+        if num > 0.4:
+            training_periods.append(data)
         else:
-            validation_periods.append(period)
+            validation_periods.append(data)
     return training_periods, validation_periods
 
 

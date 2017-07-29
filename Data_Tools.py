@@ -130,12 +130,12 @@ def get_data_split_by_walking(db, sensingPeriod):
 
 
 def get_walking_statistics(dfs, period, userInfo):
-    survey = period["survey"]
-    didDrink = survey["didDrink"]
-    drinkUnits = survey["units"]
-    drinkFeeling = survey["feeling"]
+    #survey = period["survey"]
+    #didDrink = survey["didDrink"]
+    #drinkUnits = survey["units"]
+    #drinkFeeling = survey["feeling"]
 
-    drinkRating = drinkUnits*drinkFeeling if didDrink else 0
+    #drinkRating = drinkUnits*drinkFeeling if didDrink else 0
 
 
     walking_data = []
@@ -155,37 +155,29 @@ def get_walking_statistics(dfs, period, userInfo):
             end = df_steps.tail(1).index.get_values()[0]
             duration = (np.timedelta64(end - start, 's')).astype(int)
 
-            step_count = df["step"].value_counts()[True]
+            step_count = df_steps["step"].value_counts()[True]
 
-            cadence = step_count / duration
+            if (step_count > 0) and (duration > 0):
+                cadence = step_count / duration
 
-            df_steps["step_time"] = df_steps.index.to_series().diff().astype('timedelta64[ms]')
-            df_steps["step_time"] = np.where((df_steps["step_time"] < 2000), df_steps["step_time"], -1)
-            df_steps["step_time"].fillna((-1), inplace=True)
+                df_steps["step_time"] = df_steps.index.to_series().diff().astype('timedelta64[ms]')
+                df_steps["step_time"] = np.where((df_steps["step_time"] < 2000), df_steps["step_time"], -1)
+                df_steps["step_time"].fillna((-1), inplace=True)
 
-            average_step_time = df_steps[df_steps["step_time"] > 0]["step_time"].mean() / 1000
+                average_step_time = df_steps[df_steps["step_time"] > 0]["step_time"].mean() / 1000
 
 
-            skewness = df["Accel_mag"].skew()
-            kurtosis = df["Accel_mag"].kurtosis()
+                skewness = df["Accel_mag"].skew()
+                kurtosis = df["Accel_mag"].kurtosis()
 
-            walking_data.append({"start_time": start,
-                                 "duration": duration,
-                                 "step_count": step_count,
-                                 "cadence": cadence,
-                                 "step_time": average_step_time,
-                                 "gait_stretch": average_gait_stretch,
-                                 "skewness": skewness,
-                                 "kurtosis": kurtosis,
-                                 "didDrink": didDrink,
-                                 "drinkUnits": drinkUnits,
-                                 "drinkFeeling": drinkFeeling,
-                                 "drinkRating": drinkRating,
-                                 "user": userInfo["UID"],
-                                 "age": userInfo["age"],
-                                 "height": userInfo["height"],
-                                 "weight": userInfo["weight"],
-                                 "gender": userInfo["gender"]})
+                walking_data.append({"start_time": start,
+                                     "duration": duration,
+                                     "step_count": step_count,
+                                     "cadence": cadence,
+                                     "step_time": average_step_time,
+                                     "gait_stretch": average_gait_stretch,
+                                     "skewness": skewness,
+                                     "kurtosis": kurtosis})
 
     return walking_data
 
