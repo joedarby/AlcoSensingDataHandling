@@ -113,6 +113,7 @@ def check_data_complete(db):
             else:
                 db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeMotionData": False}},
                                              upsert=False)
+            period = db.sensingperiods.find_one({"_id":periodID})
             print(periodID, dataOK, period["completeData"])
 
 def filesOK(list, directory):
@@ -158,7 +159,6 @@ def fix_consent(db):
 
             jsonFile = json.loads(file.read())
             db.users.update_one({"_id": id}, {"$set": {"body": jsonFile}}, upsert=False)
-
 
 
 
