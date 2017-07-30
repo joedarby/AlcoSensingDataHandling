@@ -182,18 +182,24 @@ def get_walking_statistics(dfs):
     return walking_data
 
 
+# Metod to extract frequency domain features from walking data
 def get_walking_frequency_stats(df):
     df = df["Accel_mag"]
+    #clean up and resample df to give evenly spaced samples (required for DFT)
     df = df[~df.index.duplicated(keep='first')]
     df = df.resample('ms').interpolate()
     df = df.resample('25ms').interpolate()
     df = df.dropna()
     array = df.as_matrix().ravel()
+    #sample rate is 40 Hz (once per 25ms)
     fs = 1000/25
+    #Welch's method for Power Spectral Density
     f, pxx = welch(array, fs=fs, return_onesided=True)
+    #Simpson's integration from samples
     total_power = simps(pxx, f)
     df = pd.DataFrame(f, columns=["frequency"])
     df["power"] = pd.Series(pxx)
+    #Consider 3 Hz to be low/high boundary
     low_df = df[df["frequency"] <= 3]
     high_df = df[df["frequency"] > 3]
     low_freq_power = simps(low_df["power"].as_matrix(), low_df["frequency"].as_matrix())
