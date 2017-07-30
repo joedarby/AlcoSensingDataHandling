@@ -1,11 +1,11 @@
-from pymongo import MongoClient
 import numpy as np
 import pandas as pd
-from pprint import pprint
-from random import randint
-import random
+from pymongo import MongoClient
+
+
 import RandomForest
-from sklearn.metrics import confusion_matrix
+import Gait_Analysis
+
 
 np.set_printoptions(linewidth=640)
 pd.set_option('display.max_columns', 500)
@@ -85,10 +85,11 @@ print(summary_df)
 
 '''
 
-dbClient = MongoClient()
-db = dbClient.alcosensing
 
 def main():
+
+    dbClient = MongoClient()
+    db = dbClient.alcosensing
 
     '''
     periods = db.sensingperiods.find()
@@ -125,94 +126,11 @@ def main():
 
     #print(stats)
 
-    training_data, validation_data = split_data(db)
-    training_features, training_targets = extract_data(training_data)
-
-
-
+    training_data, validation_data = Gait_Analysis.sample_data(db)
+    training_features, training_targets = Gait_Analysis.generate_model_inputs(training_data)
     model = RandomForest.fit_forest(training_features, training_targets)
+    RandomForest.validate_model(model, validation_data)
 
-
-    accuracies = []
-
-    for i in range(10):
-        drunk_periods = []
-        sober_periods = []
-        data_size = len(validation_data)
-        while len(drunk_periods) < 21:
-            num = randint(0, data_size-1)
-            selection = validation_data[num]
-            if selection[0]["survey"] is not None:
-                if selection[0]["survey"]["feeling"] > 1:
-                    drunk_periods.append(selection)
-        while len(sober_periods) < 21:
-            num = randint(0, data_size-1)
-            selection = validation_data[num]
-            if selection[0]["survey"] is not None:
-                if selection[0]["survey"]["feeling"] <= 1:
-                    sober_periods.append(selection)
-
-        selected_periods = drunk_periods + sober_periods
-
-
-        validation_features, validation_targets = extract_data(selected_periods)
-        predicted_targets = model.predict(validation_features)
-        conf_mat = confusion_matrix(validation_targets, predicted_targets)
-        accuracy = model.score(validation_features, validation_targets)
-        result = [conf_mat, accuracy]
-
-        accuracies.append(result)
-
-    pprint(accuracies)
-
-
-
-
-def extract_data(data):
-    data_list = []
-    for d in data:
-        period = d[0]
-        stats = d[1]
-
-        survey = period["survey"]
-        if survey is not None:
-            stats["didDrink"] = survey["didDrink"]
-            stats["drinkUnits"] = survey["units"]
-            stats["drinkFeeling"] = survey["feeling"]
-
-            data_list.append(stats)
-
-    df = pd.DataFrame(data_list)
-    #print(df)
-
-    df = df[df["cadence"] < 9999]
-    df = df[df["duration"] > 30]
-    df = df[df["step_count"] > 15]
-
-    df["drunk"] = np.where((df["drinkFeeling"] < 2), 0, 1)
-
-    features = df.as_matrix(["cadence", "step_time", "gait_stretch", "skewness", "kurtosis"])
-    targets = df.as_matrix(["drunk"]).ravel()
-
-    return features, targets
-
-
-def split_data(db):
-    training_periods = []
-    validation_periods = []
-    all_data = []
-    periods = db.sensingperiods.find({"completeMotionData": True})
-    for period in periods:
-        if "gait_stats" in period.keys():
-            for key in period["gait_stats"].keys():
-                all_data.append((period, period["gait_stats"].get(key)))
-    for data in all_data:
-        num = random.uniform(0, 1)
-        if num > 0.5:
-            training_periods.append(data)
-        else:
-            validation_periods.append(data)
-    return training_periods, validation_periods
 
 
 if __name__ == '__main__':
