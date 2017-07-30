@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pprint import pprint
 import datetime as dt
+from scipy.signal import welch
+from scipy.integrate import simps
 
 # Takes one sensor data file and converts to a pandas dataframe
 def get_file_as_df(db, sensingPeriod, sensor):
@@ -129,17 +131,11 @@ def get_data_split_by_walking(db, sensingPeriod):
     return dfs_walking, dfs_non_walking
 
 
-def get_walking_statistics(dfs, period, userInfo):
-    #survey = period["survey"]
-    #didDrink = survey["didDrink"]
-    #drinkUnits = survey["units"]
-    #drinkFeeling = survey["feeling"]
-
-    #drinkRating = drinkUnits*drinkFeeling if didDrink else 0
-
+def get_walking_statistics(dfs):
 
     walking_data = []
     for df in dfs:
+        freq_stats = get_walking_frequency_stats(df)
         df = label_anti_steps(df)
 
         if 'anti_step' in df:
@@ -170,16 +166,42 @@ def get_walking_statistics(dfs, period, userInfo):
                 skewness = df["Accel_mag"].skew()
                 kurtosis = df["Accel_mag"].kurtosis()
 
-                walking_data.append({"start_time": start,
+                results = {"start_time": start,
                                      "duration": duration,
                                      "step_count": step_count,
                                      "cadence": cadence,
                                      "step_time": average_step_time,
                                      "gait_stretch": average_gait_stretch,
                                      "skewness": skewness,
-                                     "kurtosis": kurtosis})
+                                     "kurtosis": kurtosis}
+                for key in freq_stats.keys():
+                    results[key] = freq_stats[key]
+
+                walking_data.append(results)
 
     return walking_data
+
+
+def get_walking_frequency_stats(df):
+    df = df["Accel_mag"]
+    df = df[~df.index.duplicated(keep='first')]
+    df = df.resample('ms').interpolate()
+    df = df.resample('25ms').interpolate()
+    df = df.dropna()
+    array = df.as_matrix().ravel()
+    fs = 1000/25
+    f, pxx = welch(array, fs=fs, return_onesided=True)
+    total_power = simps(pxx, f)
+    df = pd.DataFrame(f, columns=["frequency"])
+    df["power"] = pd.Series(pxx)
+    low_df = df[df["frequency"] <= 3]
+    high_df = df[df["frequency"] > 3]
+    low_freq_power = simps(low_df["power"].as_matrix(), low_df["frequency"].as_matrix())
+    high_freq_power = simps(high_df["power"].as_matrix(), high_df["frequency"].as_matrix())
+    power_ratio = high_freq_power / low_freq_power
+    stats = {"total_power": total_power,
+             "power_ratio": power_ratio}
+    return stats
 
 
 # Filter out non-accelerometer data and label the steps

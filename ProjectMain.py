@@ -2,13 +2,11 @@ import numpy as np
 import pandas as pd
 from pymongo import MongoClient
 
-
 import RandomForest
 import Gait_Analysis
 
 
 def main():
-
     training_data, validation_data = Gait_Analysis.sample_data(db)
     training_features, training_targets = Gait_Analysis.generate_model_inputs(training_data)
     model = RandomForest.fit_forest(training_features, training_targets)

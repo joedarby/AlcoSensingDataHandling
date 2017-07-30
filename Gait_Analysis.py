@@ -4,15 +4,14 @@ from multiprocessing import Pool
 import numpy as np
 import Data_Tools
 import pandas as pd
+from pymongo import MongoClient
 
 
 # Method to recalculate gait analysis data if methodology changes. Parallelised.
-def generate_features(db):
+def generate_features():
     periods = db.sensingperiods.find({"completeMotionData": True})
     pool = Pool()
     pool.map(get_stats_wrapped, periods)
-    pool.close()
-    pool.join()
 
 
 # Try/except wrapper for get_stats
@@ -28,12 +27,10 @@ def get_stats_wrapped(period):
 
 # Method to generate gait analysis data from a given sensing period. Used by generate_features. Updates gait
 # analysis data into the db
-def get_stats_for_period(db, period):
+def get_stats_for_period(period):
     id = period["_id"]
-    userID = period["user"]
-    userInfo = db.users.find_one({"_id": userID})["body"]
     dfs_walking, dfs_non_walking = Data_Tools.get_data_split_by_walking(db, id)
-    walking_data = Data_Tools.get_walking_statistics(dfs_walking, period, userInfo)
+    walking_data = Data_Tools.get_walking_statistics(dfs_walking)
     if len(walking_data) > 0:
         df = pd.DataFrame(walking_data)
         df = df[df["cadence"] < 9999]
@@ -99,7 +96,7 @@ def generate_model_inputs(data):
 
     print_summary_statistics(df)
 
-    features = df.as_matrix(["cadence", "step_time", "gait_stretch", "skewness", "kurtosis"])
+    features = df.as_matrix(["cadence", "step_time", "gait_stretch", "skewness", "kurtosis", "total_power", "power_ratio"])
     targets = df.as_matrix(["drunk"]).ravel()
 
     return features, targets
@@ -141,3 +138,8 @@ def check_all_data(db):
             no_good += 1
     print(good, no_good)
     print(sections)
+
+if __name__ == "__main__":
+    dbClient = MongoClient()
+    db = dbClient.alcosensing
+    generate_features()
