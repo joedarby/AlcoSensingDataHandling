@@ -4,9 +4,11 @@ from pprint import pprint
 import gzip
 import csv
 
+DIRECTORY = "/home/joe/dev/MSc/data/"
+
 
 def update_users(dataBucket, db):
-    path = "/home/joe/dev/MSc/data/"
+    path = DIRECTORY
     new = 0
     for file in dataBucket.objects.all():
         fileName = file.key
@@ -46,7 +48,7 @@ def check_files(dataBucket):
 
 
 def update_files(dataBucket, db):
-    path = "/home/joe/dev/MSc/data/"
+    path = DIRECTORY
     for file in dataBucket.objects.all():
         fileName = file.key
         userID = fileName[:16]
@@ -91,7 +93,7 @@ def update_survey_info(db):
         print("\n")
 
 def check_data_complete(db):
-    path = "/home/joe/dev/MSc/data/"
+    path = DIRECTORY
     for period in db.sensingperiods.find():
         periodID = period["_id"]
         user = period["user"]
@@ -159,27 +161,3 @@ def fix_consent(db):
 
             jsonFile = json.loads(file.read())
             db.users.update_one({"_id": id}, {"$set": {"body": jsonFile}}, upsert=False)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

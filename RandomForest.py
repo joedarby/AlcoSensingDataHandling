@@ -18,19 +18,20 @@ def fit_forest(x, y):
 
 
 def validate_model(model, validation_data):
+    number_of_samples = 30
     accuracies = []
 
     for i in range(10):
         drunk_periods = []
         sober_periods = []
         data_size = len(validation_data)
-        while len(drunk_periods) < 21:
+        while len(drunk_periods) <= (number_of_samples / 2):
             num = randint(0, data_size - 1)
             selection = validation_data[num]
             if selection[0]["survey"] is not None:
                 if selection[0]["survey"]["feeling"] > 1:
                     drunk_periods.append(selection)
-        while len(sober_periods) < 21:
+        while len(sober_periods) <= (number_of_samples / 2):
             num = randint(0, data_size - 1)
             selection = validation_data[num]
             if selection[0]["survey"] is not None:

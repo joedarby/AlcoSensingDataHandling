@@ -18,7 +18,7 @@ def generate_features(db):
 # Try/except wrapper for get_stats
 def get_stats_wrapped(period):
     try:
-        get_stats(period)
+        get_stats_for_period(period)
 
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
@@ -28,7 +28,7 @@ def get_stats_wrapped(period):
 
 # Method to generate gait analysis data from a given sensing period. Used by generate_features. Updates gait
 # analysis data into the db
-def get_stats(db, period):
+def get_stats_for_period(db, period):
     id = period["_id"]
     userID = period["user"]
     userInfo = db.users.find_one({"_id": userID})["body"]
@@ -54,7 +54,7 @@ def get_stats(db, period):
 # Method to take a random split of valid and pre-generated gait analysis data, splitting into training data
 # and validation data
 def sample_data(db):
-    PERCENT_VALIDATION = 0.5
+    PERCENT_VALIDATION = 0.2
     training_periods = []
     validation_periods = []
     all_data = []
@@ -97,7 +97,47 @@ def generate_model_inputs(data):
 
     df["drunk"] = np.where((df["drinkFeeling"] < 2), 0, 1)
 
+    print_summary_statistics(df)
+
     features = df.as_matrix(["cadence", "step_time", "gait_stretch", "skewness", "kurtosis"])
     targets = df.as_matrix(["drunk"]).ravel()
 
     return features, targets
+
+
+#  Method to print summary stats of gait analysis data
+def print_summary_statistics(df):
+    df_no_drink = df[df["drunk"] == 0]
+    #df_moderate_drink = df[(df["didDrink"] == True) & (df["drinkFeeling"] < 2)]
+    df_high_drink = df[df["drunk"] == 1]
+
+    print("No drink count:" + str(len(df_no_drink.index)))
+    print("Drink count:" + str(len(df_high_drink.index)))
+
+    no_drink_stats = df_no_drink.mean()
+    #moderate_drink_stats = df_moderate_drink.mean()
+    high_drink_stats = df_high_drink.mean()
+
+    stats = pd.concat([no_drink_stats, high_drink_stats], axis=1)
+    stats.columns = ["none", "high"]
+
+    print(stats)
+
+
+
+def check_all_data(db):
+    periods = db.sensingperiods.find()
+    good = 0
+    no_good = 0
+    sections = 0
+    for period in periods:
+        id = period["_id"]
+        if "gait_stats" in period.keys():
+            print(id + ": " + str(len(period["gait_stats"])))
+            good += 1
+            sections += len(period["gait_stats"])
+        else:
+            print(id + ": no valid walking sections")
+            no_good += 1
+    print(good, no_good)
+    print(sections)
