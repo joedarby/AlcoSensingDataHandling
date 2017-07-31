@@ -2,26 +2,35 @@ from sklearn import ensemble
 from random import randint
 from sklearn.metrics import confusion_matrix
 from pprint import pprint
+import numpy as np
 
 import Gait_Analysis
 
 
 
-def fit_forest(x, y):
+def fit_forest(x, y, selected_features):
     rf_model = ensemble.RandomForestClassifier()
     rf_model.fit(x, y)
-    print(rf_model.feature_importances_)
+    importances = rf_model.feature_importances_
+    #print("\nImportances:")
+    #for a,b in zip(selected_features, importances):
+        #print(a,b)
+    #print("\n")
+
     #print(rf_model.oob_score_)
     #print(rf_model.oob_decision_function_)
 
     return rf_model
 
 
-def validate_model(model, validation_data):
+def validate_model(model, validation_data, selected_features):
     number_of_samples = 30
+    output = []
     accuracies = []
 
-    for i in range(10):
+    repetitions = 10
+
+    for i in range(repetitions):
         drunk_periods = []
         sober_periods = []
         data_size = len(validation_data)
@@ -40,13 +49,20 @@ def validate_model(model, validation_data):
 
         selected_periods = drunk_periods + sober_periods
 
-        validation_features, validation_targets = Gait_Analysis.generate_model_inputs(selected_periods)
+        validation_features, validation_targets = Gait_Analysis.generate_model_inputs(selected_periods, selected_features)
         predicted_targets = model.predict(validation_features)
         conf_mat = confusion_matrix(validation_targets, predicted_targets)
         accuracy = model.score(validation_features, validation_targets)
         result = [conf_mat, accuracy]
 
-        accuracies.append(result)
+        output.append(result)
+        accuracies.append(accuracy)
 
-    pprint(accuracies)
+    mean_accuracy = np.array(accuracies).mean()
+
+    #pprint(output)
+    print("mean accuracy = " + str(mean_accuracy))
+
+    return mean_accuracy
+
 

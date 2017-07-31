@@ -71,7 +71,7 @@ def sample_data(db):
 
 # Method to take data (at both training and validation stage), as lists of dictionaries, filter the data and return
 # arrays which can be fed into sklearn model
-def generate_model_inputs(data):
+def generate_model_inputs(data, selected_features):
     data_list = []
     for d in data:
         period = d[0]
@@ -94,9 +94,10 @@ def generate_model_inputs(data):
 
     df["drunk"] = np.where((df["drinkFeeling"] < 2), 0, 1)
 
-    print_summary_statistics(df)
+    #print_summary_statistics(df)
 
-    features = df.as_matrix(["cadence", "step_time", "gait_stretch", "skewness", "kurtosis", "total_power", "power_ratio"])
+
+    features = df.as_matrix(selected_features)
     targets = df.as_matrix(["drunk"]).ravel()
 
     return features, targets

@@ -1,16 +1,34 @@
 import numpy as np
 import pandas as pd
 from pymongo import MongoClient
+from multiprocessing import Pool
 
 import RandomForest
 import Gait_Analysis
 
 
 def main():
+    pool = Pool()
+    mean_accuracies = pool.map(run_model, range(100))
+    pool.close()
+    pool.join()
+
+    overall_accuracy = np.array(mean_accuracies).mean()
+    print("overall mean accuracy = " + str(overall_accuracy))
+
+
+def run_model(i):
+    dbClient = MongoClient()
+    db = dbClient.alcosensing
+
+    selected_features = ["cadence", "step_time", "gait_stretch", "skewness", "kurtosis", "total_power", "power_ratio",
+                         "SNR"]
     training_data, validation_data = Gait_Analysis.sample_data(db)
-    training_features, training_targets = Gait_Analysis.generate_model_inputs(training_data)
-    model = RandomForest.fit_forest(training_features, training_targets)
-    RandomForest.validate_model(model, validation_data)
+    training_features, training_targets = Gait_Analysis.generate_model_inputs(training_data, selected_features)
+    model = RandomForest.fit_forest(training_features, training_targets, selected_features)
+    mean_accuracy = RandomForest.validate_model(model, validation_data, selected_features)
+    return mean_accuracy
+
 
 
 def initialise():
@@ -19,13 +37,11 @@ def initialise():
     pd.set_option('display.max_columns', 500)
     pd.set_option('display.width', 1000)
 
-    dbClient = MongoClient()
-    db = dbClient.alcosensing
-    return db
+
 
 
 if __name__ == '__main__':
-    db = initialise()
+    #db = initialise()
     main()
 
 

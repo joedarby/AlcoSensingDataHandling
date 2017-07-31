@@ -191,12 +191,15 @@ def get_walking_frequency_stats(df):
     df = df.resample('25ms').interpolate()
     df = df.dropna()
     array = df.as_matrix().ravel()
+
     #sample rate is 40 Hz (once per 25ms)
     fs = 1000/25
     #Welch's method for Power Spectral Density
     f, pxx = welch(array, fs=fs, return_onesided=True)
+
     #Simpson's integration from samples
     total_power = simps(pxx, f)
+
     df = pd.DataFrame(f, columns=["frequency"])
     df["power"] = pd.Series(pxx)
     #Consider 3 Hz to be low/high boundary
@@ -205,8 +208,20 @@ def get_walking_frequency_stats(df):
     low_freq_power = simps(low_df["power"].as_matrix(), low_df["frequency"].as_matrix())
     high_freq_power = simps(high_df["power"].as_matrix(), high_df["frequency"].as_matrix())
     power_ratio = high_freq_power / low_freq_power
+
+    fundamental_freq = df.loc[df["power"].argmax()]["frequency"]
+    harmonics = [fundamental_freq * i for i in range(1,7)]
+    df["S_or_N"] = df["frequency"].apply(lambda x: x in harmonics)
+    signal_power = df[df["S_or_N"] == True]["power"].sum()
+    noise_power = df[df["S_or_N"] == False]["power"].sum()
+    SNR = signal_power / noise_power
+
+    my_total_power = df["power"].sum()
+
     stats = {"total_power": total_power,
-             "power_ratio": power_ratio}
+             "power_ratio": power_ratio,
+             "SNR": SNR}
+
     return stats
 
 
