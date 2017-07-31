@@ -12,10 +12,10 @@ def fit_forest(x, y, selected_features):
     rf_model = ensemble.RandomForestClassifier()
     rf_model.fit(x, y)
     importances = rf_model.feature_importances_
-    #print("\nImportances:")
-    #for a,b in zip(selected_features, importances):
-        #print(a,b)
-    #print("\n")
+    print("\nImportances:")
+    for a,b in zip(selected_features, importances):
+        print(a,b)
+    print("\n")
 
     #print(rf_model.oob_score_)
     #print(rf_model.oob_decision_function_)
