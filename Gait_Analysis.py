@@ -7,7 +7,7 @@ import pandas as pd
 from pymongo import MongoClient
 
 
-# Method to recalculate gait analysis data if methodology changes. Parallelised.
+# Method to recalculate gait analysis data if methodology changes or new data received. Parallelised.
 def generate_features():
     periods = db.sensingperiods.find({"completeMotionData": True})
     pool = Pool()
@@ -51,7 +51,7 @@ def get_stats_for_period(period):
 # Method to take a random split of valid and pre-generated gait analysis data, splitting into training data
 # and validation data
 def sample_data(db):
-    PERCENT_VALIDATION = 0.2
+    PERCENT_VALIDATION = 0.15
     training_periods = []
     validation_periods = []
     all_data = []

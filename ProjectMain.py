@@ -9,7 +9,7 @@ import Gait_Analysis
 
 def main():
     pool = Pool()
-    mean_accuracies = pool.map(run_model, range(10))
+    mean_accuracies = pool.map(run_model, range(300))
     pool.close()
     pool.join()
 
@@ -22,8 +22,8 @@ def run_model(i):
     db = dbClient.alcosensing
 
     #selected_features = ["cadence", "step_time", "gait_stretch", "skewness", "kurtosis", "total_power", "power_ratio",
-                        # "SNR"]
-    selected_features = ["cadence", "kurtosis", "power_ratio"]
+                        # "SNR", "THD"]
+    selected_features = ["cadence", "kurtosis", "power_ratio", "THD"]
 
     training_data, validation_data = Gait_Analysis.sample_data(db)
     training_features, training_targets = Gait_Analysis.generate_model_inputs(training_data, selected_features)

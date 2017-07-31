@@ -5,6 +5,7 @@ from pprint import pprint
 import datetime as dt
 from scipy.signal import welch
 from scipy.integrate import simps
+from math import sqrt
 
 # Takes one sensor data file and converts to a pandas dataframe
 def get_file_as_df(db, sensingPeriod, sensor):
@@ -138,6 +139,8 @@ def get_walking_statistics(dfs):
         freq_stats = get_walking_frequency_stats(df)
         df = label_anti_steps(df)
 
+        #plot_labelled_steps(df)
+
         if 'anti_step' in df:
             df_anti = df[df["anti_step"] == True]
             average_gait_stretch = df_anti["gait_stretch"].mean()
@@ -197,14 +200,17 @@ def get_walking_frequency_stats(df):
     #Welch's method for Power Spectral Density
     f, pxx = welch(array, fs=fs, return_onesided=True)
 
+    #plot_PSD(f, pxx)
+
     #Simpson's integration from samples
     total_power = simps(pxx, f)
 
     df = pd.DataFrame(f, columns=["frequency"])
     df["power"] = pd.Series(pxx)
-    #Consider 3 Hz to be low/high boundary
-    low_df = df[df["frequency"] <= 3]
-    high_df = df[df["frequency"] > 3]
+    #Consider 5 Hz to be low/high boundary
+    low_high_boundary = 5
+    low_df = df[df["frequency"] <= low_high_boundary]
+    high_df = df[df["frequency"] > low_high_boundary]
     low_freq_power = simps(low_df["power"].as_matrix(), low_df["frequency"].as_matrix())
     high_freq_power = simps(high_df["power"].as_matrix(), high_df["frequency"].as_matrix())
     power_ratio = high_freq_power / low_freq_power
@@ -216,20 +222,30 @@ def get_walking_frequency_stats(df):
     noise_power = df[df["S_or_N"] == False]["power"].sum()
     SNR = signal_power / noise_power
 
+    harmonic_powers = df[df["S_or_N"] == True]["power"].as_matrix()
+    sum_sq_harmonic_power = 0
+    for i in range(1,6):
+        sum_sq_harmonic_power += (harmonic_powers[i]**2)
+    THD = (sqrt(sum_sq_harmonic_power)) / harmonic_powers[0]
+
+
     my_total_power = df["power"].sum()
 
     stats = {"total_power": total_power,
              "power_ratio": power_ratio,
-             "SNR": SNR}
+             "SNR": SNR,
+             "THD": THD}
 
     return stats
 
 
 # Filter out non-accelerometer data and label the steps
 def label_steps(df):
+    magnitude_threshold = 2
+    std_dev_threshold = 1.25
     df = df.dropna(subset=["Accel_mag"])
     df["rolling_std_dev"] = pd.rolling_std(df["Accel_mag"], 50)
-    df["step"] = (df["Accel_mag"] < (df["Accel_mag_avg"] - (1.25 * df["rolling_std_dev"]))) & (df["Accel_mag"] < -3)
+    df["step"] = (df["Accel_mag"] < (df["Accel_mag_avg"] - (std_dev_threshold * df["rolling_std_dev"]))) & (df["Accel_mag"] < -magnitude_threshold)
     df = df.apply(lambda row: filter_steps(row, df), axis=1)
 
     return df
@@ -293,6 +309,10 @@ def plot_general(df, column):
     vals = df[column].values
 
     plt.plot(times, vals)
+    plt.show()
+
+def plot_PSD(f, pxx):
+    plt.plot(f, pxx)
     plt.show()
 
 
