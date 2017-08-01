@@ -6,9 +6,20 @@ import Data_Tools
 import pandas as pd
 from pymongo import MongoClient
 
+sd_val = 0
+prt_val = 0
+db = None
 
 # Method to recalculate gait analysis data if methodology changes or new data received. Parallelised.
-def generate_features():
+def generate_features(sd, prt):
+    dbClient = MongoClient()
+    global db
+    db = dbClient.alcosensing
+    global sd_val
+    sd_val = sd
+    global prt_val
+    prt_val = prt
+    db.sensingperiods.update({}, {"$unset": {"gait_stats": 1}}, multi=True)
     periods = db.sensingperiods.find({"completeMotionData": True})
     pool = Pool()
     pool.map(get_stats_wrapped, periods)
@@ -30,12 +41,10 @@ def get_stats_wrapped(period):
 def get_stats_for_period(period):
     id = period["_id"]
     dfs_walking, dfs_non_walking = Data_Tools.get_data_split_by_walking(db, id)
-    walking_data = Data_Tools.get_walking_statistics(dfs_walking)
+    walking_data = Data_Tools.get_walking_statistics(dfs_walking, sd_val, prt_val)
     if len(walking_data) > 0:
         df = pd.DataFrame(walking_data)
         df = df[df["cadence"] < 9999]
-        df = df[df["duration"] > 30]
-        df = df[df["step_count"] > 15]
         print("data processed")
         if len(df.index) > 0:
             dicts = df.to_dict(orient="records")
@@ -92,7 +101,9 @@ def generate_model_inputs(data, selected_features):
     df = df[df["duration"] > 30]
     df = df[df["step_count"] > 15]
 
-    df["drunk"] = np.where((df["drinkFeeling"] < 2), 0, 1)
+    df["drunk"] = np.where((df["didDrink"] == False), 0, np.where((df["drinkFeeling"] < 2), 1, 2))
+
+
 
     #print_summary_statistics(df)
 
@@ -123,24 +134,42 @@ def print_summary_statistics(df):
 
 
 
-def check_all_data(db):
+def summarise_data(db):
     periods = db.sensingperiods.find()
+    total_periods = periods.count()
+    total_with_motion = db.sensingperiods.find({"completeMotionData": True}).count()
     good = 0
     no_good = 0
     sections = 0
+    drunk_sections = 0
+    some_drink_sections = 0
+    sober_sections = 0
     for period in periods:
         id = period["_id"]
+        print(period)
         if "gait_stats" in period.keys():
             print(id + ": " + str(len(period["gait_stats"])))
             good += 1
             sections += len(period["gait_stats"])
+            if ("survey" in period.keys()) and period["survey"] is not None:
+                survey = period["survey"]
+                if "feeling" in survey.keys():
+                    drunk = survey["feeling"] >= 2
+                    some_drink = survey["didDrink"] and survey["feeling"] < 2
+                    if drunk:
+                        drunk_sections += len(period["gait_stats"])
+                    elif some_drink:
+                        some_drink_sections += len(period["gait_stats"])
+                    else:
+                        sober_sections += len(period["gait_stats"])
         else:
             print(id + ": no valid walking sections")
             no_good += 1
+    print(total_periods)
+    print(total_with_motion)
     print(good, no_good)
-    print(sections)
+    print(sections, drunk_sections, some_drink_sections, sober_sections)
 
 if __name__ == "__main__":
-    dbClient = MongoClient()
-    db = dbClient.alcosensing
-    generate_features()
+    generate_features(0.5)
+    #summarise_data(db)

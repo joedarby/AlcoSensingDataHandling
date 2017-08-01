@@ -6,6 +6,7 @@ import datetime as dt
 from scipy.signal import welch
 from scipy.integrate import simps
 from math import sqrt
+from timeit import default_timer as timer
 
 # Takes one sensor data file and converts to a pandas dataframe
 def get_file_as_df(db, sensingPeriod, sensor):
@@ -115,6 +116,7 @@ def label_walking(df):
 def get_data_split_by_walking(db, sensingPeriod):
     #df = get_all_data_for_period(db, sensingPeriod)
     df = get_accel_and_motion(db, sensingPeriod)
+    #plot_general(df, "Accel_mag")
     dfs = [g for i,g in df.groupby(df['Motion_walking'].ne(df['Motion_walking'].shift()).cumsum())]
     dfs_walking = []
     dfs_non_walking = []
@@ -122,33 +124,35 @@ def get_data_split_by_walking(db, sensingPeriod):
         start = d.head(1).index.get_values()[0]
         end = d.tail(1).index.get_values()[0]
         duration = (np.timedelta64(end - start, 's')).astype(int)
-        if d.iloc[0]['Motion_walking'] and duration > 30:
+        if (d.iloc[0]['Motion_walking'] == True) and duration > 30:
             dfs_walking.append(d)
         else:
             dfs_non_walking.append(d)
-    for i in range(len(dfs_walking)):
-        dfs_walking[i] = label_steps(dfs_walking[i])
 
     return dfs_walking, dfs_non_walking
 
 
-def get_walking_statistics(dfs):
+def get_walking_statistics(dfs, sd, prt):
 
     walking_data = []
     for df in dfs:
-        freq_stats = get_walking_frequency_stats(df)
+        freq_stats = get_walking_frequency_stats(df, prt)
+        df = label_steps(df, sd)
         df = label_anti_steps(df)
-
-        #plot_labelled_steps(df)
 
         if 'anti_step' in df:
             df_anti = df[df["anti_step"] == True]
             average_gait_stretch = df_anti["gait_stretch"].mean()
+            gs_std_dev = df_anti["gait_stretch"].std()
+            gs_skew = df_anti["gait_stretch"].skew()
+            gs_kurtosis = df_anti["gait_stretch"].kurtosis()
         else:
             average_gait_stretch = 0
+            gs_std_dev = 0
+            gs_skew = 0
+            gs_kurtosis = 0
 
         df_steps = df[df["step"] == True]
-
         if len(df_steps.index) > 0:
             start = df_steps.head(1).index.get_values()[0]
             end = df_steps.tail(1).index.get_values()[0]
@@ -156,7 +160,8 @@ def get_walking_statistics(dfs):
 
             step_count = df_steps["step"].value_counts()[True]
 
-            if (step_count > 0) and (duration > 0):
+            if (step_count > 15) and (duration > 30):
+                #plot_labelled_steps(df)
                 cadence = step_count / duration
 
                 df_steps["step_time"] = df_steps.index.to_series().diff().astype('timedelta64[ms]')
@@ -164,8 +169,11 @@ def get_walking_statistics(dfs):
                 df_steps["step_time"].fillna((-1), inplace=True)
 
                 average_step_time = df_steps[df_steps["step_time"] > 0]["step_time"].mean() / 1000
+                step_time_std_dev = df_steps[df_steps["step_time"] > 0]["step_time"].std() /1000
+                step_time_skew = df_steps[df_steps["step_time"] > 0]["step_time"].skew()
+                step_time_kurtosis = df_steps[df_steps["step_time"] > 0]["step_time"].kurtosis()
 
-
+                std_dev = df["Accel_mag"].std()
                 skewness = df["Accel_mag"].skew()
                 kurtosis = df["Accel_mag"].kurtosis()
 
@@ -174,9 +182,17 @@ def get_walking_statistics(dfs):
                                      "step_count": step_count,
                                      "cadence": cadence,
                                      "step_time": average_step_time,
+                                     "step_time_std_dev": step_time_std_dev,
+                                     "step_time_skew": step_time_skew,
+                                     "step_time_kurtosis": step_time_kurtosis,
                                      "gait_stretch": average_gait_stretch,
+                                     "std_dev": std_dev,
                                      "skewness": skewness,
-                                     "kurtosis": kurtosis}
+                                     "kurtosis": kurtosis,
+                                     "gs_skew": gs_skew,
+                                     "gs_kurtosis": gs_kurtosis,
+                                     "gs_std_dev": gs_std_dev}
+                #print(results)
                 for key in freq_stats.keys():
                     results[key] = freq_stats[key]
 
@@ -186,7 +202,7 @@ def get_walking_statistics(dfs):
 
 
 # Metod to extract frequency domain features from walking data
-def get_walking_frequency_stats(df):
+def get_walking_frequency_stats(df, prt):
     df = df["Accel_mag"]
     #clean up and resample df to give evenly spaced samples (required for DFT)
     df = df[~df.index.duplicated(keep='first')]
@@ -208,7 +224,7 @@ def get_walking_frequency_stats(df):
     df = pd.DataFrame(f, columns=["frequency"])
     df["power"] = pd.Series(pxx)
     #Consider 5 Hz to be low/high boundary
-    low_high_boundary = 5
+    low_high_boundary = prt
     low_df = df[df["frequency"] <= low_high_boundary]
     high_df = df[df["frequency"] > low_high_boundary]
     low_freq_power = simps(low_df["power"].as_matrix(), low_df["frequency"].as_matrix())
@@ -240,47 +256,97 @@ def get_walking_frequency_stats(df):
 
 
 # Filter out non-accelerometer data and label the steps
-def label_steps(df):
+def label_steps(df, sd):
+    #ts = timer()
     magnitude_threshold = 2
-    std_dev_threshold = 1.25
+    std_dev_threshold = sd
     df = df.dropna(subset=["Accel_mag"])
-    df["rolling_std_dev"] = pd.rolling_std(df["Accel_mag"], 50)
-    df["step"] = (df["Accel_mag"] < (df["Accel_mag_avg"] - (std_dev_threshold * df["rolling_std_dev"]))) & (df["Accel_mag"] < -magnitude_threshold)
-    df = df.apply(lambda row: filter_steps(row, df), axis=1)
+    df = df[~df.index.duplicated(keep='first')]
 
+    df_neg = df[df["Accel_mag"] < 0]
+    df_neg["Accel_mag_neg_avg"] = (pd.rolling_sum(df_neg["Accel_mag"], 20)) / 20
+    df_neg["rolling_std_dev"] = pd.rolling_std(df_neg["Accel_mag"], window=20, min_periods=20)
+    df_neg["step_threshold"] = (df_neg["Accel_mag_neg_avg"] - (std_dev_threshold * df_neg["rolling_std_dev"]))
+    df_neg["step"] = (df_neg["Accel_mag"] < df_neg["step_threshold"]) & (df_neg["Accel_mag"] < -magnitude_threshold)
+
+    #ts = timer()
+    df_neg = df_neg.apply(lambda row: filter_steps_forward(row, df_neg), axis=1)
+    #te = timer()
+    #print("filter steps forward took " + str(te - ts))
+
+    #ts = timer()
+    df_neg = df_neg.apply(lambda row: filter_steps_backward(row, df_neg), axis=1)
+    #te = timer()
+    #print("filter steps backward took " + str(te - ts))
+
+    df.loc[df_neg.index, "step"] = df_neg.loc[df_neg.index, "step"]
+    #df.loc[df_neg.index, "rolling_std_dev"] = df_neg.loc[df_neg.index, "rolling_std_dev"]
+    #df.loc[df_neg.index, "step_threshold"] = df_neg.loc[df_neg.index, "step_threshold"]
+    df["step"].fillna("False", inplace=True)
+    #df["rolling_std_dev"].fillna(method='pad', inplace=True)
+    #df["step_threshold"].fillna(method='pad', inplace=True)
+    #te = timer()
+    #print("label steps took " + str(te-ts))
     return df
 
 # Used by function above to filter out accelerometer peaks which have been labelled as steps but are
 # actually just artifacts (too close to a real step)
-def filter_steps(row, df):
+def filter_steps_forward(row, df):
+
     time = row.name + dt.timedelta(milliseconds=0.01)
-    time_plus_half_sec = time + dt.timedelta(milliseconds=250)
-    if row["step"]:
-        sub_df = df[time : time_plus_half_sec]
+    time_plus_250 = time + dt.timedelta(milliseconds=300)
+    if row["step"] == True:
+        sub_df = df[time: time_plus_250]
         for index, sub_row in sub_df.iterrows():
-            if sub_row["step"]:
-                row["step"] = False
-                break
+            if sub_row["step"] == True:
+                if row["Accel_mag"] > sub_row["Accel_mag"]:
+                    row["step"] = False
+                    break
+
     return row
 
+def filter_steps_backward(row, df):
+
+    time = row.name + dt.timedelta(milliseconds=0.01)
+    time_minus_250 = time - dt.timedelta(milliseconds=300)
+    if row["step"] == True:
+        sub_df = df[time_minus_250 : time]
+        for index, sub_row in sub_df.iterrows():
+            if sub_row["step"] == True:
+                if row["Accel_mag"] > sub_row["Accel_mag"]:
+                    row["step"] = False
+                    break
+    return row
+
+
 def label_anti_steps(df):
+    #ts = timer()
     for index, row in df.iterrows():
-        if row["step"]:
-            time = index + dt.timedelta(milliseconds=0.001)
+        if row["step"] == True:
+            time = row.name + dt.timedelta(milliseconds=0.001)
+            cut_off = time + dt.timedelta(milliseconds=750)
             forward_df = df[time:]
             for index2, row2 in forward_df.iterrows():
-                if row2["step"]:
-                    sub_df = forward_df[index:index2]
-                    max_index = sub_df["Accel_mag"].argmax()
+                if row2["step"] == True:
+                    if index2 < cut_off:
+                        sub_df = forward_df[time:index2]
+                    else:
+                        sub_df = forward_df[time:cut_off]
+                    if len(sub_df.index) > 0:
+                        max_index = sub_df["Accel_mag"].argmax()
+                    else:
+                        max_index = forward_df[time:index2]["Accel_mag"].argmax()
                     df.loc[max_index, "anti_step"] = True
                     df.loc[max_index, "gait_stretch"] = df.loc[max_index, "Accel_mag"] - row["Accel_mag"]
                     break
+
     if 'anti_step' in df:
         df["anti_step"].fillna(False, inplace=True)
     if 'gait_stretch' in df:
         df["gait_stretch"].fillna((-1), inplace=True)
+    #te = timer()
+    #print("label anti-steps took " + str(te - ts))
     return df
-
 
 
 #Plot accelerometer data with steps labelled with an 's'
@@ -288,10 +354,17 @@ def plot_labelled_steps(df):
     times = df.index.values
     vals = df["Accel_mag"].values
     step_labels = df["step"].values
+
+    std_dev = df["step_threshold"].values
+
     anti_step_labels = df["anti_step"].values
 
     fig, ax = plt.subplots()
     ax.plot(times,vals)
+    ax.plot(times, std_dev)
+    plt.title("Walking instance with steps/rebounds labelled")
+    plt.xlabel("Time")
+    plt.ylabel("Acceleration ms^-2")
 
     for i, label in enumerate(step_labels):
         if label == True:
@@ -309,6 +382,9 @@ def plot_general(df, column):
     vals = df[column].values
 
     plt.plot(times, vals)
+    plt.title("Raw accelerometer data")
+    plt.xlabel("Time")
+    plt.ylabel("Acceleration ms^-2")
     plt.show()
 
 def plot_PSD(f, pxx):
