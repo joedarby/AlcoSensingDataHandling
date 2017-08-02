@@ -14,13 +14,20 @@ def main():
     for prt in range(6, 7):
         #Gait_Analysis.generate_features(1.3, prt)
         pool = Pool()
-        mean_accuracies = pool.map(run_model, range(300))
+        mean_accuracies = pool.map(run_model, range(500))
         pool.close()
         pool.join()
 
-        overall_accuracy = np.array(mean_accuracies).mean()
-        print("overall mean accuracy = " + str(overall_accuracy))
-        results.append((prt, overall_accuracy))
+        overall_accuracies = np.array(mean_accuracies)
+        mean_overall_accuracy = overall_accuracies.mean()
+        min_accuracy = overall_accuracies.min()
+        max_accuracy = overall_accuracies.max()
+        std_dev_of_accuracy = overall_accuracies.std()
+        print("overall mean accuracy = " + str(mean_overall_accuracy))
+        print("min accuracy = " + str(min_accuracy))
+        print("max accuracy = " + str(max_accuracy))
+        print("std dev = " + str(std_dev_of_accuracy))
+        #results.append((prt, overall_accuracy))
 
     print(results)
 
@@ -33,23 +40,21 @@ def run_model(i):
 
     selected_features = ["cadence",
                          "step_time",
-                         "step_time_std_dev",
-                         "step_time_skew",
+                         #"step_time_std_dev",
+                         #"step_time_skew",
                          "step_time_kurtosis",
                          "gait_stretch",
-                         #x"gs_skew",
-                         #x"gs_kurtosis",
+                         "gs_skew",
+                         "gs_kurtosis",
                          "gs_std_dev",
                          #x"std_dev",
                          "skewness",
-                         #x"kurtosis",
-                         "total_power",
+                         "kurtosis",
+                         #"total_power",
                          "power_ratio",
-                         #x"SNR",
+                         "SNR",
                          "THD"
                          ]
-
-
 
 
     training_data, validation_data = Gait_Analysis.sample_data(db)

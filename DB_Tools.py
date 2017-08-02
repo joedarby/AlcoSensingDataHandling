@@ -39,3 +39,21 @@ def get_gender(user):
         return gender
     except:
         return "NA!"
+
+def check_surveys(db):
+    periods = db.sensingperiods.find()
+    header = ["User", "StartTime", "DidDrink", "Units", "Feeling"]
+    print("{: >25} {: >20} {: >8} {: >8} {: >8}".format(*header))
+    for period in periods:
+        user = period["user"]
+        start = period["startTime"]
+        if "survey" in period.keys() and period["survey"] is not None:
+            survey = period["survey"]
+            didDrink = survey["didDrink"]
+            units = survey["units"]
+            feeling = survey["feeling"]
+            result = [user, start, didDrink, units, feeling]
+            print("{: >25} {: >20} {: >8} {: >8} {: >8}".format(*result))
+        else:
+            result = [user, start, "no survey"]
+            print("{: >25} {: >20} {: >10}".format(*result))

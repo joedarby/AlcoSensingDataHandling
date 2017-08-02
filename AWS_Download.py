@@ -10,7 +10,9 @@ def main():
 
     dbClient = MongoClient()
     db = dbClient.alcosensing
+    DB_Tools.check_surveys(db)
 
+    '''
     AWS_Tools.update_users(dataBucket, db)
     #AWS_Tools.check_files(dataBucket)
     AWS_Tools.update_files(dataBucket, db)
@@ -18,6 +20,8 @@ def main():
     AWS_Tools.check_data_complete(db)
 
     DB_Tools.print_users(db)
+    '''
+
 
 
 if __name__ == '__main__':
