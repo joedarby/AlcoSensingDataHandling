@@ -5,6 +5,7 @@ import numpy as np
 import Data_Tools
 import pandas as pd
 from pymongo import MongoClient
+from math import isnan
 
 sd_val = 0
 prt_val = 0

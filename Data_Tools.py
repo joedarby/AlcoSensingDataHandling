@@ -137,7 +137,7 @@ def get_walking_statistics(dfs, sd, prt):
     walking_data = []
     for df in dfs:
         freq_stats = get_walking_frequency_stats(df, prt)
-        df = label_steps(df, sd)
+        df = label_steps_old(df, sd)
         df = label_anti_steps(df)
 
         if 'anti_step' in df:
@@ -168,35 +168,41 @@ def get_walking_statistics(dfs, sd, prt):
                 df_steps["step_time"] = np.where((df_steps["step_time"] < 2000), df_steps["step_time"], -1)
                 df_steps["step_time"].fillna((-1), inplace=True)
 
-                average_step_time = df_steps[df_steps["step_time"] > 0]["step_time"].mean() / 1000
-                step_time_std_dev = df_steps[df_steps["step_time"] > 0]["step_time"].std() /1000
-                step_time_skew = df_steps[df_steps["step_time"] > 0]["step_time"].skew()
-                step_time_kurtosis = df_steps[df_steps["step_time"] > 0]["step_time"].kurtosis()
+                if len(df_steps[df_steps["step_time"] > 0].index) > 8:
+                    average_step_time = df_steps[df_steps["step_time"] > 0]["step_time"].mean() / 1000
+                    step_time_std_dev = df_steps[df_steps["step_time"] > 0]["step_time"].std() /1000
+                    step_time_skew = df_steps[df_steps["step_time"] > 0]["step_time"].skew()
+                    step_time_kurtosis = df_steps[df_steps["step_time"] > 0]["step_time"].kurtosis()
 
-                std_dev = df["Accel_mag"].std()
-                skewness = df["Accel_mag"].skew()
-                kurtosis = df["Accel_mag"].kurtosis()
+                    std_dev = df["Accel_mag"].std()
+                    skewness = df["Accel_mag"].skew()
+                    kurtosis = df["Accel_mag"].kurtosis()
 
-                results = {"start_time": start,
-                                     "duration": duration,
-                                     "step_count": step_count,
-                                     "cadence": cadence,
-                                     "step_time": average_step_time,
-                                     "step_time_std_dev": step_time_std_dev,
-                                     "step_time_skew": step_time_skew,
-                                     "step_time_kurtosis": step_time_kurtosis,
-                                     "gait_stretch": average_gait_stretch,
-                                     "std_dev": std_dev,
-                                     "skewness": skewness,
-                                     "kurtosis": kurtosis,
-                                     "gs_skew": gs_skew,
-                                     "gs_kurtosis": gs_kurtosis,
-                                     "gs_std_dev": gs_std_dev}
-                #print(results)
-                for key in freq_stats.keys():
-                    results[key] = freq_stats[key]
-
-                walking_data.append(results)
+                    results = {"start_time": start,
+                                         "duration": duration,
+                                         "step_count": step_count,
+                                         "cadence": cadence,
+                                         "step_time": average_step_time,
+                                         "step_time_std_dev": step_time_std_dev,
+                                         "step_time_skew": step_time_skew,
+                                         "step_time_kurtosis": step_time_kurtosis,
+                                         "gait_stretch": average_gait_stretch,
+                                         "std_dev": std_dev,
+                                         "skewness": skewness,
+                                         "kurtosis": kurtosis,
+                                         "gs_skew": gs_skew,
+                                         "gs_kurtosis": gs_kurtosis,
+                                         "gs_std_dev": gs_std_dev}
+                    #print(results)
+                    for key in freq_stats.keys():
+                        results[key] = freq_stats[key]
+                    flag = True
+                    for key in results.keys():
+                        if pd.isnull(results.get(key)):
+                            print("null generated: " + key)
+                            flag = False
+                    if flag:
+                        walking_data.append(results)
 
     return walking_data
 
@@ -257,7 +263,6 @@ def get_walking_frequency_stats(df, prt):
 
 # Filter out non-accelerometer data and label the steps
 def label_steps(df, sd):
-    #ts = timer()
     magnitude_threshold = 2
     std_dev_threshold = sd
     df = df.dropna(subset=["Accel_mag"])
@@ -269,15 +274,8 @@ def label_steps(df, sd):
     df_neg["step_threshold"] = (df_neg["Accel_mag_neg_avg"] - (std_dev_threshold * df_neg["rolling_std_dev"]))
     df_neg["step"] = (df_neg["Accel_mag"] < df_neg["step_threshold"]) & (df_neg["Accel_mag"] < -magnitude_threshold)
 
-    #ts = timer()
     df_neg = df_neg.apply(lambda row: filter_steps_forward(row, df_neg), axis=1)
-    #te = timer()
-    #print("filter steps forward took " + str(te - ts))
-
-    #ts = timer()
     df_neg = df_neg.apply(lambda row: filter_steps_backward(row, df_neg), axis=1)
-    #te = timer()
-    #print("filter steps backward took " + str(te - ts))
 
     df.loc[df_neg.index, "step"] = df_neg.loc[df_neg.index, "step"]
     #df.loc[df_neg.index, "rolling_std_dev"] = df_neg.loc[df_neg.index, "rolling_std_dev"]
@@ -285,9 +283,22 @@ def label_steps(df, sd):
     df["step"].fillna("False", inplace=True)
     #df["rolling_std_dev"].fillna(method='pad', inplace=True)
     #df["step_threshold"].fillna(method='pad', inplace=True)
-    #te = timer()
-    #print("label steps took " + str(te-ts))
+
     return df
+
+def label_steps_old(df, sd):
+    magnitude_threshold = 2
+    std_dev_threshold = sd
+    df = df.dropna(subset=["Accel_mag"])
+    df = df[~df.index.duplicated(keep='first')]
+    df["rolling_std_dev"] = pd.rolling_std(df["Accel_mag"], window=50, min_periods=50)
+    df["step_threshold"] = (df["Accel_mag_avg"] - (std_dev_threshold * df["rolling_std_dev"]))
+    df["step"] = (df["Accel_mag"] < df["step_threshold"]) & (df["Accel_mag"] < -magnitude_threshold)
+    df = df.apply(lambda row: filter_steps_forward(row, df), axis=1)
+    df = df.apply(lambda row: filter_steps_backward(row, df), axis=1)
+
+    return df
+
 
 # Used by function above to filter out accelerometer peaks which have been labelled as steps but are
 # actually just artifacts (too close to a real step)
