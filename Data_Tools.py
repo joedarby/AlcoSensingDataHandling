@@ -142,6 +142,11 @@ def get_walking_statistics(dfs, sd, prt):
 
         if 'anti_step' in df:
             df_anti = df[df["anti_step"] == True]
+            anti_mag_mean = df_anti["Accel_mag"].mean()
+            anti_mag_std_dev = df_anti["Accel_mag"].std()
+            anti_mag_skewness = df_anti["Accel_mag"].skew()
+            anti_mag_kurtosis = df_anti["Accel_mag"].kurtosis()
+
             average_gait_stretch = df_anti["gait_stretch"].mean()
             gs_std_dev = df_anti["gait_stretch"].std()
             gs_skew = df_anti["gait_stretch"].skew()
@@ -151,6 +156,10 @@ def get_walking_statistics(dfs, sd, prt):
             gs_std_dev = 0
             gs_skew = 0
             gs_kurtosis = 0
+            anti_mag_mean = 0
+            anti_mag_std_dev = 0
+            anti_mag_skewness = 0
+            anti_mag_kurtosis = 0
 
         df_steps = df[df["step"] == True]
         if len(df_steps.index) > 0:
@@ -174,9 +183,15 @@ def get_walking_statistics(dfs, sd, prt):
                     step_time_skew = df_steps[df_steps["step_time"] > 0]["step_time"].skew()
                     step_time_kurtosis = df_steps[df_steps["step_time"] > 0]["step_time"].kurtosis()
 
-                    std_dev = df["Accel_mag"].std()
-                    skewness = df["Accel_mag"].skew()
-                    kurtosis = df["Accel_mag"].kurtosis()
+                    signal_mean = df["Accel_mag"].mean()
+                    signal_std_dev = df["Accel_mag"].std()
+                    signal_skewness = df["Accel_mag"].skew()
+                    signal_kurtosis = df["Accel_mag"].kurtosis()
+
+                    steps_mean = df_steps["Accel_mag"].mean()
+                    steps_std_dev = df_steps["Accel_mag"].std()
+                    steps_skewness = df_steps["Accel_mag"].skew()
+                    steps_kurtosis = df_steps["Accel_mag"].kurtosis()
 
                     results = {"start_time": start,
                                          "duration": duration,
@@ -187,12 +202,21 @@ def get_walking_statistics(dfs, sd, prt):
                                          "step_time_skew": step_time_skew,
                                          "step_time_kurtosis": step_time_kurtosis,
                                          "gait_stretch": average_gait_stretch,
-                                         "std_dev": std_dev,
-                                         "skewness": skewness,
-                                         "kurtosis": kurtosis,
+                                         "signal_mean" : signal_mean,
+                                         "signal_std_dev": signal_std_dev,
+                                         "signal_skewness": signal_skewness,
+                                         "signal_kurtosis": signal_kurtosis,
                                          "gs_skew": gs_skew,
                                          "gs_kurtosis": gs_kurtosis,
-                                         "gs_std_dev": gs_std_dev}
+                                         "gs_std_dev": gs_std_dev,
+                                         "steps_mean": steps_mean,
+                                         "steps_std_dev": steps_std_dev,
+                                         "steps_skewness": steps_skewness,
+                                         "steps_kurtosis": steps_kurtosis,
+                                         "anti_mag_mean": anti_mag_mean,
+                                         "anti_mag_std_dev": anti_mag_std_dev,
+                                         "anti_mag_skewness": anti_mag_skewness,
+                                         "anti_mag_kurtosis": anti_mag_kurtosis}
                     #print(results)
                     for key in freq_stats.keys():
                         results[key] = freq_stats[key]

@@ -14,7 +14,7 @@ def main():
     for prt in range(6, 7):
         #Gait_Analysis.generate_features(1.3, prt)
         pool = Pool()
-        mean_accuracies = pool.map(run_model, range(30))
+        mean_accuracies = pool.map(run_model, range(50))
         pool.close()
         pool.join()
 
@@ -39,21 +39,30 @@ def run_model(i):
     db = dbClient.alcosensing
 
     selected_features = ["cadence",
-                         "step_time",
-                         #"step_time_std_dev",
-                         #"step_time_skew",
-                         "step_time_kurtosis",
-                         "gait_stretch",
-                         "gs_skew",
-                         "gs_kurtosis",
-                         "gs_std_dev",
-                         #x"std_dev",
-                         "skewness",
-                         "kurtosis",
-                         #"total_power",
-                         "power_ratio",
-                         "SNR",
-                         "THD"
+                           "step_time",
+                           "step_time_std_dev",
+                           "step_time_skew",
+                           "step_time_kurtosis",
+                           "gait_stretch",
+                           #-"signal_mean",
+                           "signal_std_dev",
+                           "signal_skewness",
+                           "signal_kurtosis",
+                           "gs_skew",
+                           #-"gs_kurtosis",
+                           "gs_std_dev",
+                           "steps_mean",
+                           "steps_std_dev",
+                           #0"steps_skewness",
+                           #0"steps_kurtosis",
+                           "anti_mag_mean",
+                           "anti_mag_std_dev",
+                           #0"anti_mag_skewness",
+                           #0"anti_mag_kurtosis",
+                           "total_power",
+                           "power_ratio",
+                           "SNR",
+                           "THD"
                          ]
 
 

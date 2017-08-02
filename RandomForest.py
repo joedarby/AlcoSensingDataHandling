@@ -24,7 +24,7 @@ def fit_forest(x, y, selected_features):
 
 
 def validate_model(model, validation_data, selected_features):
-    number_of_samples = 30
+    number_of_samples = 60
     output = []
     accuracies = []
 
