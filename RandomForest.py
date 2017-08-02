@@ -39,19 +39,19 @@ def validate_model(model, validation_data, selected_features):
             num = randint(0, data_size - 1)
             selection = validation_data[num]
             if selection[0]["survey"] is not None:
-                if selection[0]["survey"]["didDrink"] == False:
+                if (selection[0]["survey"]["didDrink"] == False):
                     sober_periods.append(selection)
         while len(middle_periods) <= (number_of_samples / 3):
             num = randint(0, data_size - 1)
             selection = validation_data[num]
             if selection[0]["survey"] is not None:
-                if (selection[0]["survey"]["didDrink"] == True) and (selection[0]["survey"]["feeling"] < 2):
+                if (selection[0]["survey"]["didDrink"] == True) and (selection[0]["survey"]["drinkRating"] <= 8):
                     middle_periods.append(selection)
         while len(drunk_periods) <= (number_of_samples / 3):
             num = randint(0, data_size - 1)
             selection = validation_data[num]
             if selection[0]["survey"] is not None:
-                if (selection[0]["survey"]["didDrink"] == True) and (selection[0]["survey"]["feeling"] >= 2):
+                if (selection[0]["survey"]["didDrink"] == True) and (selection[0]["survey"]["drinkRating"] > 8):
                     drunk_periods.append(selection)
 
         selected_periods = drunk_periods + middle_periods + sober_periods
@@ -67,7 +67,8 @@ def validate_model(model, validation_data, selected_features):
 
     mean_accuracy = np.array(accuracies).mean()
 
-    #pprint(output)
+    for o in output:
+        print(o[0], o[1])
     print("mean accuracy = " + str(mean_accuracy))
 
     return mean_accuracy

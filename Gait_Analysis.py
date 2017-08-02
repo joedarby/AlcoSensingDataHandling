@@ -92,6 +92,7 @@ def generate_model_inputs(data, selected_features):
             stats["didDrink"] = survey["didDrink"]
             stats["drinkUnits"] = survey["units"]
             stats["drinkFeeling"] = survey["feeling"]
+            stats["drinkRating"] = survey["drinkRating"]
 
             data_list.append(stats)
 
@@ -102,7 +103,7 @@ def generate_model_inputs(data, selected_features):
     df = df[df["duration"] > 30]
     df = df[df["step_count"] > 15]
 
-    df["drunk"] = np.where((df["didDrink"] == False), 0, np.where((df["drinkFeeling"] < 2), 1, 2))
+    df["drunk"] = np.where((df["didDrink"] == False), 0, np.where((df["drinkRating"] <= 8), 1,  2))
 
 
 

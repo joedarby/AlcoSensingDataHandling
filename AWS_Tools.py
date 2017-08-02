@@ -92,6 +92,18 @@ def update_survey_info(db):
         pprint(db.sensingperiods.find_one({"_id": period["_id"]}))
         print("\n")
 
+def insert_drink_rating(db):
+    for period in db.sensingperiods.find():
+        periodID = period["_id"]
+        if "survey" in period.keys() and period["survey"] is not None:
+            survey = period["survey"]
+            if "drinkRating" not in survey.keys():
+                units = survey["units"]
+                feeling = survey["feeling"]
+                drinkRating = (units + 1) * (feeling + 1)
+                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"survey.drinkRating": drinkRating}}, upsert=False)
+
+
 def check_data_complete(db):
     path = DIRECTORY
     for period in db.sensingperiods.find():

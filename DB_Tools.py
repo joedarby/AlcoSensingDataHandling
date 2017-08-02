@@ -1,3 +1,6 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
 def print_users(db):
     print("\n")
     header = ["ID", "email", "responses", "drink", "noDrink", "age", "height", "weight", "gender"]
@@ -42,18 +45,57 @@ def get_gender(user):
 
 def check_surveys(db):
     periods = db.sensingperiods.find()
-    header = ["User", "StartTime", "DidDrink", "Units", "Feeling"]
-    print("{: >25} {: >20} {: >8} {: >8} {: >8}".format(*header))
+    header = ["User", "StartTime", "DidDrink", "Units", "Feeling", "DrinkRating", "Category"]
+    print("{: >25} {: >20} {: >8} {: >8} {: >8} {: >8} {: >8}".format(*header))
+    male_x = []
+    male_y = []
+    female_x = []
+    female_y = []
+    threshold = 8
+    cat0 = 0
+    cat1 = 0
+    cat2 = 0
     for period in periods:
         user = period["user"]
         start = period["startTime"]
         if "survey" in period.keys() and period["survey"] is not None:
+            userInfo = db.users.find_one({"_id":user})
+            gender = userInfo["body"]["gender"]
             survey = period["survey"]
             didDrink = survey["didDrink"]
             units = survey["units"]
             feeling = survey["feeling"]
-            result = [user, start, didDrink, units, feeling]
-            print("{: >25} {: >20} {: >8} {: >8} {: >8}".format(*result))
+            rating = survey["drinkRating"]
+            category = 0 if (didDrink) == False else (1 if rating <= threshold else 2)
+            if category == 0:
+                cat0 += 1
+            elif category == 1:
+                cat1 += 1
+            elif category == 2:
+                cat2 += 1
+            result = [user, start, didDrink, units, feeling, rating, category]
+            print("{: >25} {: >20} {: >8} {: >8} {: >8} {: >8} {: >8}".format(*result))
+            if didDrink and gender == "Male":
+                male_x.append(units)
+                male_y.append(feeling)
+            elif didDrink and gender == "Female":
+                female_x.append(units)
+                female_y.append(feeling)
         else:
             result = [user, start, "no survey"]
             print("{: >25} {: >20} {: >10}".format(*result))
+
+    print(cat0, cat1, cat2)
+    fig, ax = plt.subplots()
+    ax.plot(male_x, male_y, 'o')
+    ax.plot(female_x, female_y, 'x')
+
+    range1 = np.array(range(0,threshold))
+    formula1 = "threshold/(range1+1) - 1"
+    ax.plot(range1, eval(formula1))
+
+
+    plt.xlabel("Units")
+    plt.ylabel("Feeling")
+    plt.show()
+
