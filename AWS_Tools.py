@@ -89,8 +89,8 @@ def update_survey_info(db):
                 db.sensingperiods.update_one({"_id": periodID}, {"$set" : {"survey" : jsonContent}}, upsert=False)
             else:
                 db.sensingperiods.update_one({"_id": periodID}, {"$set": {"survey": None}}, upsert=False)
-        pprint(db.sensingperiods.find_one({"_id": period["_id"]}))
-        print("\n")
+        #pprint(db.sensingperiods.find_one({"_id": period["_id"]}))
+        #print("\n")
 
 def insert_drink_rating(db):
     for period in db.sensingperiods.find():

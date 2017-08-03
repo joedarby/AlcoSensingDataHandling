@@ -5,7 +5,6 @@ import numpy as np
 import Data_Tools
 import pandas as pd
 from pymongo import MongoClient
-from math import isnan
 
 sd_val = 0
 prt_val = 0
@@ -23,18 +22,31 @@ def generate_features(sd, prt):
     db.sensingperiods.update({}, {"$unset": {"gait_stats": 1}}, multi=True)
     periods = db.sensingperiods.find({"completeMotionData": True})
     pool = Pool()
-    pool.map(get_stats_wrapped, periods)
+    vals = pool.map(get_stats_wrapped, periods)
+    pool.close()
+    pool.join
+    durations = []
+    for v in vals:
+        for i in v:
+            if i > 0:
+                durations.append(i)
+    count = np.array(durations).size
+    mean = np.array(durations).mean()
+
+    print("count = " + str(count))
+    print("mean = " + str(mean))
 
 
 # Try/except wrapper for get_stats
 def get_stats_wrapped(period):
     try:
-        get_stats_for_period(period)
+        return get_stats_for_period(period)
 
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
         message = template.format(type(ex).__name__, ex.args)
         print(message)
+        return 0
 
 
 # Method to generate gait analysis data from a given sensing period. Used by generate_features. Updates gait
@@ -48,14 +60,20 @@ def get_stats_for_period(period):
         df = df[df["cadence"] < 9999]
         print("data processed")
         if len(df.index) > 0:
+            print(len(df.index))
             dicts = df.to_dict(orient="records")
             i = 0
             main_dict = {}
+            durations = []
             for dict in dicts:
                 name = "gait" + str(i)
                 main_dict[name] = dict
+                durations.append(dict["duration"])
                 i += 1
             db.sensingperiods.update_one({"_id": id}, {"$set":{"gait_stats": main_dict}}, upsert=False)
+            return (durations)
+    print(0)
+    return ([0])
 
 
 # Method to take a random split of valid and pre-generated gait analysis data, splitting into training data
@@ -173,5 +191,5 @@ def summarise_data(db):
     print(sections, drunk_sections, some_drink_sections, sober_sections)
 
 if __name__ == "__main__":
-    generate_features(0.5)
+    generate_features(1.3, 6)
     #summarise_data(db)

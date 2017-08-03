@@ -12,9 +12,9 @@ def main():
     print(cpu_count())
     results = []
     for prt in range(6, 7):
-        #Gait_Analysis.generate_features(1.3, prt)
+        Gait_Analysis.generate_features(1.3, prt)
         pool = Pool()
-        mean_accuracies = pool.map(run_model, range(50))
+        mean_accuracies = pool.map(run_model, range(500))
         pool.close()
         pool.join()
 

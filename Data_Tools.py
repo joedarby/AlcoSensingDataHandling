@@ -1,14 +1,14 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from pprint import pprint
 import datetime as dt
-from scipy.signal import welch
-from scipy.integrate import simps
 from math import sqrt
-from timeit import default_timer as timer
 
-# Takes one sensor data file and converts to a pandas dataframe
+import numpy as np
+import pandas as pd
+from scipy.integrate import simps
+from scipy.signal import welch
+
+import Charts
+
+
 def get_file_as_df(db, sensingPeriod, sensor):
     file_id = sensingPeriod + "-" + sensor
     record = db.data.find_one({"_id":file_id})
@@ -78,6 +78,7 @@ def get_accel_and_motion(db, sensingPeriod):
     motion_df = get_file_as_df(db, sensingPeriod, "MotionActivity")
     main_df = pd.merge(main_df, motion_df, how='outer', left_index=True, right_index=True)
     label_walking(main_df)
+    #plot_3_axis(main_df)
 
     return main_df
 
@@ -97,6 +98,7 @@ def calc_accelerometer_magnitude(df):
     df["Accel_mag"] = df["sq_rt_sum_sq"] - df["rolling_avg"]
     df["Accel_mag_avg"] = (pd.rolling_sum(df["Accel_mag"], window)) / window
 
+
 # For a given sensing period, get motion activity data only
 def get_motion_activity(db, sensingPeriod):
     df = get_file_as_df(db, sensingPeriod, "MotionActivity")
@@ -115,19 +117,39 @@ def label_walking(df):
 
 def get_data_split_by_walking(db, sensingPeriod):
     #df = get_all_data_for_period(db, sensingPeriod)
-    df = get_accel_and_motion(db, sensingPeriod)
-    #plot_general(df, "Accel_mag")
-    dfs = [g for i,g in df.groupby(df['Motion_walking'].ne(df['Motion_walking'].shift()).cumsum())]
+    main_df = get_accel_and_motion(db, sensingPeriod)
+
+    input_dfs = [g for i,g in main_df.groupby(main_df['Motion_walking'].ne(main_df['Motion_walking'].shift()).cumsum())]
+
     dfs_walking = []
     dfs_non_walking = []
-    for d in dfs:
-        start = d.head(1).index.get_values()[0]
-        end = d.tail(1).index.get_values()[0]
-        duration = (np.timedelta64(end - start, 's')).astype(int)
+
+    for df in input_dfs:
+        if (df.iloc[0]['Motion_walking'] == False) and (get_df_duration(df) < 2):
+            df['Motion_walking'] = True
+
+    output_dfs = []
+    for df in input_dfs:
+        if len(output_dfs) == 0:
+            output_dfs.append(df)
+        else:
+            last = output_dfs.pop(-1)
+            if (last.iloc[0]['Motion_walking']) == (df.iloc[0]['Motion_walking']):
+                merged = pd.concat([last, df])
+                output_dfs.append(merged)
+            else:
+                output_dfs.append(last)
+                output_dfs.append(df)
+
+
+    for d in output_dfs:
+        duration = get_df_duration(d)
         if (d.iloc[0]['Motion_walking'] == True) and duration > 30:
             dfs_walking.append(d)
         else:
             dfs_non_walking.append(d)
+
+    #Charts.plot_with_vertical_lines(main_df, dfs_walking)
 
     return dfs_walking, dfs_non_walking
 
@@ -136,6 +158,7 @@ def get_walking_statistics(dfs, sd, prt):
 
     walking_data = []
     for df in dfs:
+        #plot_general(df, "Accel_mag")
         freq_stats = get_walking_frequency_stats(df, prt)
         df = label_steps_old(df, sd)
         df = label_anti_steps(df)
@@ -163,9 +186,7 @@ def get_walking_statistics(dfs, sd, prt):
 
         df_steps = df[df["step"] == True]
         if len(df_steps.index) > 0:
-            start = df_steps.head(1).index.get_values()[0]
-            end = df_steps.tail(1).index.get_values()[0]
-            duration = (np.timedelta64(end - start, 's')).astype(int)
+            duration = get_df_duration(df_steps)
 
             step_count = df_steps["step"].value_counts()[True]
 
@@ -193,8 +214,7 @@ def get_walking_statistics(dfs, sd, prt):
                     steps_skewness = df_steps["Accel_mag"].skew()
                     steps_kurtosis = df_steps["Accel_mag"].kurtosis()
 
-                    results = {"start_time": start,
-                                         "duration": duration,
+                    results = {          "duration": duration,
                                          "step_count": step_count,
                                          "cadence": cadence,
                                          "step_time": average_step_time,
@@ -246,7 +266,7 @@ def get_walking_frequency_stats(df, prt):
     #Welch's method for Power Spectral Density
     f, pxx = welch(array, fs=fs, return_onesided=True)
 
-    #plot_PSD(f, pxx)
+    #Charts.plot_PSD(f, pxx)
 
     #Simpson's integration from samples
     total_power = simps(pxx, f)
@@ -384,46 +404,9 @@ def label_anti_steps(df):
     return df
 
 
-#Plot accelerometer data with steps labelled with an 's'
-def plot_labelled_steps(df):
-    times = df.index.values
-    vals = df["Accel_mag"].values
-    step_labels = df["step"].values
-
-    std_dev = df["step_threshold"].values
-
-    anti_step_labels = df["anti_step"].values
-
-    fig, ax = plt.subplots()
-    ax.plot(times,vals)
-    ax.plot(times, std_dev)
-    plt.title("Walking instance with steps/rebounds labelled")
-    plt.xlabel("Time")
-    plt.ylabel("Acceleration ms^-2")
-
-    for i, label in enumerate(step_labels):
-        if label == True:
-            ax.annotate("s", (times[i], vals[i]))
-
-    for i, label in enumerate(anti_step_labels):
-        if label == True:
-            ax.annotate("x", (times[i], vals[i]))
-
-    plt.show()
-
-#Plot any general numerical data against the time index
-def plot_general(df, column):
-    times = df.index.values
-    vals = df[column].values
-
-    plt.plot(times, vals)
-    plt.title("Raw accelerometer data")
-    plt.xlabel("Time")
-    plt.ylabel("Acceleration ms^-2")
-    plt.show()
-
-def plot_PSD(f, pxx):
-    plt.plot(f, pxx)
-    plt.show()
-
+def get_df_duration(df):
+    start = df.head(1).index.get_values()[0]
+    end = df.tail(1).index.get_values()[0]
+    duration = (np.timedelta64(end - start, 's')).astype(int)
+    return duration
 
