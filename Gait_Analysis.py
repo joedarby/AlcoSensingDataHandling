@@ -60,7 +60,7 @@ def get_stats_for_period(period):
         df = df[df["cadence"] < 9999]
         print("data processed")
         if len(df.index) > 0:
-            print(len(df.index))
+            #print(len(df.index))
             dicts = df.to_dict(orient="records")
             i = 0
             main_dict = {}
@@ -72,7 +72,7 @@ def get_stats_for_period(period):
                 i += 1
             db.sensingperiods.update_one({"_id": id}, {"$set":{"gait_stats": main_dict}}, upsert=False)
             return (durations)
-    print(0)
+    #print(0)
     return ([0])
 
 

@@ -114,7 +114,7 @@ def check_data_complete(db):
             directory = path + user + "/" + time
             list = os.listdir(directory)
             dataOK = filesOK(list, directory)
-            motionDataOK = motionFilesOK(list, directory)
+            motionDataOK, locationDataOK = motionFilesOK(list, directory)
             if dataOK:
                 db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeData": True}},
                                              upsert=False)
@@ -127,8 +127,14 @@ def check_data_complete(db):
             else:
                 db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeMotionData": False}},
                                              upsert=False)
+            if locationDataOK:
+                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeLocationData": True}},
+                                             upsert=False)
+            else:
+                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeLocationData": False}},
+                                             upsert=False)
             period = db.sensingperiods.find_one({"_id":periodID})
-            print(periodID, dataOK, period["completeData"])
+            print(periodID, dataOK, period["completeData"], period["completeMotionData"], period["completeLocationData"])
 
 def filesOK(list, directory):
     if len(list) < 9:
@@ -145,6 +151,7 @@ def filesOK(list, directory):
 def motionFilesOK(list, directory):
     accelOK = False
     motionOK = False
+    locationOK = False
     for file in list:
         filePath = directory + "/" + file
         if "Accelerometer" in file:
@@ -153,7 +160,12 @@ def motionFilesOK(list, directory):
         if "MotionActivity" in file:
             if get_file_length(filePath) > 10:
                 motionOK = True
-    return motionOK and accelOK
+        if "Location" in file:
+            if get_file_length(filePath) > 3:
+                locationOK = True
+    return (motionOK and accelOK), locationOK
+
+
 
 
 def get_file_length(filePath):

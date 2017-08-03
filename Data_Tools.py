@@ -240,11 +240,17 @@ def get_walking_statistics(dfs, sd, prt):
                     #print(results)
                     for key in freq_stats.keys():
                         results[key] = freq_stats[key]
+
+                    general_stats = get_df_general_features(df)
+                    for key in general_stats:
+                        results[key] = general_stats[key]
+
                     flag = True
                     for key in results.keys():
                         if pd.isnull(results.get(key)):
                             print("null generated: " + key)
                             flag = False
+
                     if flag:
                         walking_data.append(results)
 
@@ -407,6 +413,28 @@ def label_anti_steps(df):
 def get_df_duration(df):
     start = df.head(1).index.get_values()[0]
     end = df.tail(1).index.get_values()[0]
-    duration = (np.timedelta64(end - start, 's')).astype(int)
+    duration = (np.timedelta64(end - start, 'ms')).astype(float) /1000
     return duration
+
+def get_df_general_features(df):
+    start = df.head(1).index[0]
+    end = df.tail(1).index[0]
+    duration = end - start
+    half_duration = duration / 2
+    middle = start + half_duration
+    hour = middle.hour
+    minute = middle.minute
+
+    day_of_week = middle.dayofweek if hour > 6 else (middle - pd.Timedelta('1 days')).dayofweek
+
+    hour_since_6am = hour - 6 if hour >= 6 else hour + 24 - 6
+    minutes_since_6am = (hour_since_6am * 60) + minute
+
+    result = {
+        "time" : minutes_since_6am,
+        "day_of_week" : day_of_week
+    }
+    return result
+
+
 

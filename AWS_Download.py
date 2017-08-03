@@ -24,6 +24,36 @@ def main():
 
 
     DB_Tools.check_surveys(db)
+    '''
+
+    periods = db.sensingperiods.find({"$and":[{"completeMotionData" : True}, {"completeLocationData" : True}]})
+    #periods = db.sensingperiods.find()
+    count = periods.count()
+    with_survey = 0
+    trigger_known = 0
+    trigger0 = 0
+    trigger1 = 0
+    trigger2 = 0
+    for period in periods:
+        if "survey" in period.keys():
+            survey = period["survey"]
+            if survey is not None:
+                with_survey += 1
+                if "triggerType" in survey.keys():
+                    trigger_known += 1
+                    type = survey["triggerType"]
+                    if type == 0:
+                        trigger0 += 1
+                    elif type == 1:
+                        trigger1 += 1
+                    elif type == 2:
+                        trigger2 += 1
+
+
+    print(count, with_survey, trigger_known)
+    print(trigger0, trigger1, trigger2)
+    '''
+
 
 
 
