@@ -7,7 +7,7 @@ from scipy.integrate import simps
 from scipy.signal import welch
 
 import Charts
-
+import time
 
 def get_file_as_df(db, sensingPeriod, sensor):
     file_id = sensingPeriod + "-" + sensor
@@ -77,7 +77,7 @@ def get_accel_and_motion(db, sensingPeriod):
     main_df = get_file_as_df(db, sensingPeriod, "Accelerometer")
     motion_df = get_file_as_df(db, sensingPeriod, "MotionActivity")
     main_df = pd.merge(main_df, motion_df, how='outer', left_index=True, right_index=True)
-    label_walking(main_df)
+    main_df = label_walking(main_df)
     #plot_3_axis(main_df)
     return main_df
 
@@ -86,6 +86,10 @@ def get_with_location(db, sensingPeriod):
     main_df = get_accel_and_motion(db, sensingPeriod)
     location_df = get_file_as_df(db, sensingPeriod, "Location")
     main_df = pd.merge(main_df, location_df, how='outer', left_index=True, right_index=True)
+    main_df["Location_lat"].fillna(method='ffill', inplace=True)
+    main_df["Location_long"].fillna(method='ffill', inplace=True)
+    main_df["Location_lat"].fillna(method='bfill', inplace=True)
+    main_df["Location_long"].fillna(method='bfill', inplace=True)
     return main_df
 
 
@@ -119,6 +123,7 @@ def label_walking(df):
     df.loc[df['Motion_activity'] == 7, 'Motion_walking'] = True
     df.loc[(df['Motion_activity'] != 7) & (df['Motion_activity'] >= 0), 'Motion_walking'] = False
     df['Motion_walking'].fillna(method='ffill', inplace=True)
+    return df
 
 
 def split_out_walking_periods(raw_df):
@@ -143,7 +148,6 @@ def split_out_walking_periods(raw_df):
             else:
                 output_dfs.append(last)
                 output_dfs.append(df)
-
 
     for d in output_dfs:
         duration = get_df_duration(d)
@@ -173,7 +177,6 @@ def filter_walking_periods(dfs, sd):
                 valid_dfs.append(df)
 
     return valid_dfs
-
 
 
 def get_walking_statistics(df, prt):
@@ -265,9 +268,23 @@ def get_walking_statistics(df, prt):
             flag = False
 
     if flag:
+        print("walking data generated")
         return results
     else:
         return None
+
+def get_location_statistics(df):
+    #df = df.apply(lambda row: test(row))
+    #print(df)
+    return "blah"
+
+
+def test(row):
+    row["result"] = row["Location_lat"] * row["Location_long"]
+    time.sleep(3)
+    return row
+
+
 
 
 # Metod to extract frequency domain features from walking data
@@ -312,9 +329,6 @@ def get_walking_frequency_stats(df, prt):
     for i in range(1,6):
         sum_sq_harmonic_power += (harmonic_powers[i]**2)
     THD = (sqrt(sum_sq_harmonic_power)) / harmonic_powers[0]
-
-
-    my_total_power = df["power"].sum()
 
     stats = {"total_power": total_power,
              "power_ratio": power_ratio,

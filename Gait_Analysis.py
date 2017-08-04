@@ -10,6 +10,8 @@ import sys
 import os
 import traceback
 
+from pprint import pprint
+
 sd_val = 0
 prt_val = 0
 db = None
@@ -24,7 +26,7 @@ def generate_features(sd, prt):
     global prt_val
     prt_val = prt
     db.sensingperiods.update({}, {"$unset": {"features": 1}}, multi=True)
-    periods = db.sensingperiods.find({"completeMotionData": True})
+    periods = db.sensingperiods.find({"$and": [{"completeMotionData": True}, {"completeLocationData": True}]})
 
     pool = Pool()
     pool.map(get_stats_wrapped, periods)
@@ -49,7 +51,7 @@ def get_stats_wrapped(period):
 # analysis data into the db
 def get_stats_for_period(sensing_period):
     s_period_id = sensing_period["_id"]
-    raw_dataframe = Data_Tools.get_accel_and_motion(db, s_period_id)
+    raw_dataframe = Data_Tools.get_with_location(db, s_period_id)
     walking_dfs = Data_Tools.split_out_walking_periods(raw_dataframe)
     filtered_dfs = Data_Tools.filter_walking_periods(walking_dfs, sd_val)
 
@@ -57,7 +59,7 @@ def get_stats_for_period(sensing_period):
     for df in filtered_dfs:
         gait_stats = Data_Tools.get_walking_statistics(df, prt_val)
         if gait_stats is not None:
-            location_stats = "to-do"
+            location_stats = Data_Tools.get_location_statistics(df)
             if location_stats is not None:
                 sub_period_features.append((gait_stats, location_stats))
 
@@ -69,8 +71,8 @@ def get_stats_for_period(sensing_period):
         features[sub_period_string]["location"] = stats[1]
 
     db.sensingperiods.update_one({"_id": s_period_id}, {"$set": {"features": features}}, upsert=False)
-    res = db.sensingperiods.find_one({"_id": s_period_id})
-    print(res)
+    print("period processed")
+
 
 
 # Method to take a random split of valid and pre-generated gait analysis data, splitting into training data
@@ -83,9 +85,10 @@ def sample_data(db):
     #periods = db.sensingperiods.find({"completeMotionData": True})
     periods = db.sensingperiods.find({"$and":[{"completeMotionData": True}, {"completeLocationData":True}]})
     for period in periods:
-        if "gait_stats" in period.keys():
-            for key in period["gait_stats"].keys():
-                all_data.append((period, period["gait_stats"].get(key)))
+        if "features" in period.keys():
+            for subperiod in period["features"].keys():
+                subperiod_data = period["features"][subperiod]
+                all_data.append((period, subperiod_data))
     for data in all_data:
         num = random.uniform(0, 1)
         if num > PERCENT_VALIDATION:
@@ -101,16 +104,19 @@ def generate_model_inputs(data, selected_features):
     data_list = []
     for d in data:
         period = d[0]
-        stats = d[1]
+        subperiod_data = d[1]
+        gait = subperiod_data["gait"]
+        all_stats = {}
+        all_stats.update(gait)
 
         survey = period["survey"]
         if survey is not None:
-            stats["didDrink"] = survey["didDrink"]
-            stats["drinkUnits"] = survey["units"]
-            stats["drinkFeeling"] = survey["feeling"]
-            stats["drinkRating"] = survey["drinkRating"]
+            all_stats["didDrink"] = survey["didDrink"]
+            all_stats["drinkUnits"] = survey["units"]
+            all_stats["drinkFeeling"] = survey["feeling"]
+            all_stats["drinkRating"] = survey["drinkRating"]
 
-            data_list.append(stats)
+            data_list.append(all_stats)
 
     df = pd.DataFrame(data_list)
     #print(df)
@@ -121,10 +127,7 @@ def generate_model_inputs(data, selected_features):
 
     df["drunk"] = np.where((df["didDrink"] == False), 0, np.where((df["drinkRating"] <= 8), 1,  2))
 
-
-
     #print_summary_statistics(df)
-
 
     features = df.as_matrix(selected_features)
     targets = df.as_matrix(["drunk"]).ravel()
@@ -189,5 +192,9 @@ def summarise_data(db):
     print(sections, drunk_sections, some_drink_sections, sober_sections)
 
 if __name__ == "__main__":
+    np.set_printoptions(linewidth=640)
+    pd.set_option('display.max_columns', 500)
+    pd.set_option('display.width', 1000)
+
     generate_features(1.3, 6)
     #summarise_data(db)

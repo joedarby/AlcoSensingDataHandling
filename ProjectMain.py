@@ -14,9 +14,10 @@ def main():
     for prt in range(6, 7):
         #Gait_Analysis.generate_features(1.3, prt)
         pool = Pool()
-        mean_accuracies = pool.map(run_model, range(500))
+        mean_accuracies = pool.map(run_model, range(300))
         pool.close()
         pool.join()
+
 
         overall_accuracies = np.array(mean_accuracies)
         mean_overall_accuracy = overall_accuracies.mean()
@@ -63,8 +64,8 @@ def run_model(i):
                            "power_ratio",
                            "SNR",
                            "THD",
-                           "day_of_week",
-                           "time"
+                           #"day_of_week",
+                           #"time"
                          ]
 
 
