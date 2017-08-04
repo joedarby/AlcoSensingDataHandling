@@ -6,6 +6,10 @@ import Data_Tools
 import pandas as pd
 from pymongo import MongoClient
 
+import sys
+import os
+import traceback
+
 sd_val = 0
 prt_val = 0
 db = None
@@ -19,61 +23,54 @@ def generate_features(sd, prt):
     sd_val = sd
     global prt_val
     prt_val = prt
-    db.sensingperiods.update({}, {"$unset": {"gait_stats": 1}}, multi=True)
+    db.sensingperiods.update({}, {"$unset": {"features": 1}}, multi=True)
     periods = db.sensingperiods.find({"completeMotionData": True})
-    pool = Pool()
-    vals = pool.map(get_stats_wrapped, periods)
-    pool.close()
-    pool.join
-    durations = []
-    for v in vals:
-        for i in v:
-            if i > 0:
-                durations.append(i)
-    count = np.array(durations).size
-    mean = np.array(durations).mean()
 
-    print("count = " + str(count))
-    print("mean = " + str(mean))
+    pool = Pool()
+    pool.map(get_stats_wrapped, periods)
+    pool.close()
+    pool.join()
+
 
 
 # Try/except wrapper for get_stats
 def get_stats_wrapped(period):
     try:
-        return get_stats_for_period(period)
+        get_stats_for_period(period)
 
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
         message = template.format(type(ex).__name__, ex.args)
         print(message)
-        return 0
+        traceback.print_tb(ex.__traceback__)
 
 
 # Method to generate gait analysis data from a given sensing period. Used by generate_features. Updates gait
 # analysis data into the db
-def get_stats_for_period(period):
-    id = period["_id"]
-    dfs_walking, dfs_non_walking = Data_Tools.get_data_split_by_walking(db, id)
-    walking_data = Data_Tools.get_walking_statistics(dfs_walking, sd_val, prt_val)
-    if len(walking_data) > 0:
-        df = pd.DataFrame(walking_data)
-        df = df[df["cadence"] < 9999]
-        print("data processed")
-        if len(df.index) > 0:
-            #print(len(df.index))
-            dicts = df.to_dict(orient="records")
-            i = 0
-            main_dict = {}
-            durations = []
-            for dict in dicts:
-                name = "gait" + str(i)
-                main_dict[name] = dict
-                durations.append(dict["duration"])
-                i += 1
-            db.sensingperiods.update_one({"_id": id}, {"$set":{"gait_stats": main_dict}}, upsert=False)
-            return (durations)
-    #print(0)
-    return ([0])
+def get_stats_for_period(sensing_period):
+    s_period_id = sensing_period["_id"]
+    raw_dataframe = Data_Tools.get_accel_and_motion(db, s_period_id)
+    walking_dfs = Data_Tools.split_out_walking_periods(raw_dataframe)
+    filtered_dfs = Data_Tools.filter_walking_periods(walking_dfs, sd_val)
+
+    sub_period_features = []
+    for df in filtered_dfs:
+        gait_stats = Data_Tools.get_walking_statistics(df, prt_val)
+        if gait_stats is not None:
+            location_stats = "to-do"
+            if location_stats is not None:
+                sub_period_features.append((gait_stats, location_stats))
+
+    features = {}
+    for i, stats in enumerate(sub_period_features):
+        sub_period_string = "sub_period_" + str(i)
+        features[sub_period_string] = {}
+        features[sub_period_string]["gait"] = stats[0]
+        features[sub_period_string]["location"] = stats[1]
+
+    db.sensingperiods.update_one({"_id": s_period_id}, {"$set": {"features": features}}, upsert=False)
+    res = db.sensingperiods.find_one({"_id": s_period_id})
+    print(res)
 
 
 # Method to take a random split of valid and pre-generated gait analysis data, splitting into training data
@@ -83,7 +80,8 @@ def sample_data(db):
     training_periods = []
     validation_periods = []
     all_data = []
-    periods = db.sensingperiods.find({"completeMotionData": True})
+    #periods = db.sensingperiods.find({"completeMotionData": True})
+    periods = db.sensingperiods.find({"$and":[{"completeMotionData": True}, {"completeLocationData":True}]})
     for period in periods:
         if "gait_stats" in period.keys():
             for key in period["gait_stats"].keys():

@@ -67,8 +67,8 @@ def validate_model(model, validation_data, selected_features):
 
     mean_accuracy = np.array(accuracies).mean()
 
-    for o in output:
-        print(o[0], o[1])
+    #for o in output:
+    #    print(o[0], o[1])
     print("mean accuracy = " + str(mean_accuracy))
 
     return mean_accuracy

@@ -24,6 +24,7 @@ def main():
 
 
     DB_Tools.check_surveys(db)
+
     '''
 
     periods = db.sensingperiods.find({"$and":[{"completeMotionData" : True}, {"completeLocationData" : True}]})
@@ -52,6 +53,18 @@ def main():
 
     print(count, with_survey, trigger_known)
     print(trigger0, trigger1, trigger2)
+
+    periods = db.sensingperiods.find({"$and": [{"completeMotionData": True}, {"completeLocationData": True}]})
+    sum_coords = 0
+    for period in periods:
+        id = period["_id"]
+        locationEntry = db.data.find_one({"$and": [{"period":id}, {"sensorType": "Location"}]})
+        locationFile = locationEntry["filePath"]
+        print(locationFile)
+        no_of_coords = AWS_Tools.get_file_length(locationFile)
+        print(no_of_coords)
+        sum_coords += no_of_coords
+    print("Sum = " + str(sum_coords))
     '''
 
 

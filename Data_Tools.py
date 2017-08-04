@@ -57,7 +57,6 @@ def get_file_as_df(db, sensingPeriod, sensor):
         return None
 
 
-
 # For a given sensing period, convert all files to dataframes and merge the dataframes
 def get_all_data_for_period(db, sensingPeriod):
     main_df = get_file_as_df(db, sensingPeriod, "Accelerometer")
@@ -73,13 +72,20 @@ def get_all_data_for_period(db, sensingPeriod):
 
     return main_df
 
+
 def get_accel_and_motion(db, sensingPeriod):
     main_df = get_file_as_df(db, sensingPeriod, "Accelerometer")
     motion_df = get_file_as_df(db, sensingPeriod, "MotionActivity")
     main_df = pd.merge(main_df, motion_df, how='outer', left_index=True, right_index=True)
     label_walking(main_df)
     #plot_3_axis(main_df)
+    return main_df
 
+
+def get_with_location(db, sensingPeriod):
+    main_df = get_accel_and_motion(db, sensingPeriod)
+    location_df = get_file_as_df(db, sensingPeriod, "Location")
+    main_df = pd.merge(main_df, location_df, how='outer', left_index=True, right_index=True)
     return main_df
 
 
@@ -115,21 +121,18 @@ def label_walking(df):
     df['Motion_walking'].fillna(method='ffill', inplace=True)
 
 
-def get_data_split_by_walking(db, sensingPeriod):
-    #df = get_all_data_for_period(db, sensingPeriod)
-    main_df = get_accel_and_motion(db, sensingPeriod)
+def split_out_walking_periods(raw_df):
+    split_dfs = [g for i,g in raw_df.groupby(raw_df['Motion_walking'].ne(raw_df['Motion_walking'].shift()).cumsum())]
 
-    input_dfs = [g for i,g in main_df.groupby(main_df['Motion_walking'].ne(main_df['Motion_walking'].shift()).cumsum())]
+    walking_dfs = []
+    #dfs_non_walking = []
 
-    dfs_walking = []
-    dfs_non_walking = []
-
-    for df in input_dfs:
+    for df in split_dfs:
         if (df.iloc[0]['Motion_walking'] == False) and (get_df_duration(df) < 2):
             df['Motion_walking'] = True
 
     output_dfs = []
-    for df in input_dfs:
+    for df in split_dfs:
         if len(output_dfs) == 0:
             output_dfs.append(df)
         else:
@@ -145,116 +148,126 @@ def get_data_split_by_walking(db, sensingPeriod):
     for d in output_dfs:
         duration = get_df_duration(d)
         if (d.iloc[0]['Motion_walking'] == True) and duration > 30:
-            dfs_walking.append(d)
-        else:
-            dfs_non_walking.append(d)
+            walking_dfs.append(d)
+        #else:
+        #    dfs_non_walking.append(d)
 
     #Charts.plot_with_vertical_lines(main_df, dfs_walking)
 
-    return dfs_walking, dfs_non_walking
+    return walking_dfs
 
 
-def get_walking_statistics(dfs, sd, prt):
-
-    walking_data = []
+def filter_walking_periods(dfs, sd):
+    valid_dfs = []
     for df in dfs:
-        #plot_general(df, "Accel_mag")
-        freq_stats = get_walking_frequency_stats(df, prt)
         df = label_steps_old(df, sd)
-        df = label_anti_steps(df)
-
-        if 'anti_step' in df:
-            df_anti = df[df["anti_step"] == True]
-            anti_mag_mean = df_anti["Accel_mag"].mean()
-            anti_mag_std_dev = df_anti["Accel_mag"].std()
-            anti_mag_skewness = df_anti["Accel_mag"].skew()
-            anti_mag_kurtosis = df_anti["Accel_mag"].kurtosis()
-
-            average_gait_stretch = df_anti["gait_stretch"].mean()
-            gs_std_dev = df_anti["gait_stretch"].std()
-            gs_skew = df_anti["gait_stretch"].skew()
-            gs_kurtosis = df_anti["gait_stretch"].kurtosis()
-        else:
-            average_gait_stretch = 0
-            gs_std_dev = 0
-            gs_skew = 0
-            gs_kurtosis = 0
-            anti_mag_mean = 0
-            anti_mag_std_dev = 0
-            anti_mag_skewness = 0
-            anti_mag_kurtosis = 0
-
         df_steps = df[df["step"] == True]
-        if len(df_steps.index) > 0:
+        step_count = len(df_steps.index)
+        if step_count > 15:
             duration = get_df_duration(df_steps)
+            df_steps["step_time"] = df_steps.index.to_series().diff().astype('timedelta64[ms]')
+            df_steps["step_time"] = np.where((df_steps["step_time"] < 2000), df_steps["step_time"], -1)
+            df_steps["step_time"].fillna((-1), inplace=True)
+            valid_step_time_count = len(df_steps[df_steps["step_time"] > 0].index)
+            if (duration > 30) and (valid_step_time_count > 8):
+                valid_dfs.append(df)
 
-            step_count = df_steps["step"].value_counts()[True]
+    return valid_dfs
 
-            if (step_count > 15) and (duration > 30):
-                #plot_labelled_steps(df)
-                cadence = step_count / duration
 
-                df_steps["step_time"] = df_steps.index.to_series().diff().astype('timedelta64[ms]')
-                df_steps["step_time"] = np.where((df_steps["step_time"] < 2000), df_steps["step_time"], -1)
-                df_steps["step_time"].fillna((-1), inplace=True)
 
-                if len(df_steps[df_steps["step_time"] > 0].index) > 8:
-                    average_step_time = df_steps[df_steps["step_time"] > 0]["step_time"].mean() / 1000
-                    step_time_std_dev = df_steps[df_steps["step_time"] > 0]["step_time"].std() /1000
-                    step_time_skew = df_steps[df_steps["step_time"] > 0]["step_time"].skew()
-                    step_time_kurtosis = df_steps[df_steps["step_time"] > 0]["step_time"].kurtosis()
+def get_walking_statistics(df, prt):
+    freq_stats = get_walking_frequency_stats(df, prt)
 
-                    signal_mean = df["Accel_mag"].mean()
-                    signal_std_dev = df["Accel_mag"].std()
-                    signal_skewness = df["Accel_mag"].skew()
-                    signal_kurtosis = df["Accel_mag"].kurtosis()
+    df = label_anti_steps(df)
 
-                    steps_mean = df_steps["Accel_mag"].mean()
-                    steps_std_dev = df_steps["Accel_mag"].std()
-                    steps_skewness = df_steps["Accel_mag"].skew()
-                    steps_kurtosis = df_steps["Accel_mag"].kurtosis()
+    if 'anti_step' in df:
+        df_anti = df[df["anti_step"] == True]
+        anti_mag_mean = df_anti["Accel_mag"].mean()
+        anti_mag_std_dev = df_anti["Accel_mag"].std()
+        anti_mag_skewness = df_anti["Accel_mag"].skew()
+        anti_mag_kurtosis = df_anti["Accel_mag"].kurtosis()
 
-                    results = {          "duration": duration,
-                                         "step_count": step_count,
-                                         "cadence": cadence,
-                                         "step_time": average_step_time,
-                                         "step_time_std_dev": step_time_std_dev,
-                                         "step_time_skew": step_time_skew,
-                                         "step_time_kurtosis": step_time_kurtosis,
-                                         "gait_stretch": average_gait_stretch,
-                                         "signal_mean" : signal_mean,
-                                         "signal_std_dev": signal_std_dev,
-                                         "signal_skewness": signal_skewness,
-                                         "signal_kurtosis": signal_kurtosis,
-                                         "gs_skew": gs_skew,
-                                         "gs_kurtosis": gs_kurtosis,
-                                         "gs_std_dev": gs_std_dev,
-                                         "steps_mean": steps_mean,
-                                         "steps_std_dev": steps_std_dev,
-                                         "steps_skewness": steps_skewness,
-                                         "steps_kurtosis": steps_kurtosis,
-                                         "anti_mag_mean": anti_mag_mean,
-                                         "anti_mag_std_dev": anti_mag_std_dev,
-                                         "anti_mag_skewness": anti_mag_skewness,
-                                         "anti_mag_kurtosis": anti_mag_kurtosis}
-                    #print(results)
-                    for key in freq_stats.keys():
-                        results[key] = freq_stats[key]
+        average_gait_stretch = df_anti["gait_stretch"].mean()
+        gs_std_dev = df_anti["gait_stretch"].std()
+        gs_skew = df_anti["gait_stretch"].skew()
+        gs_kurtosis = df_anti["gait_stretch"].kurtosis()
+    else:
+        average_gait_stretch = 0
+        gs_std_dev = 0
+        gs_skew = 0
+        gs_kurtosis = 0
+        anti_mag_mean = 0
+        anti_mag_std_dev = 0
+        anti_mag_skewness = 0
+        anti_mag_kurtosis = 0
 
-                    general_stats = get_df_general_features(df)
-                    for key in general_stats:
-                        results[key] = general_stats[key]
+    df_steps = df[df["step"] == True]
+    duration = get_df_duration(df_steps)
+    step_count = len(df_steps.index)
 
-                    flag = True
-                    for key in results.keys():
-                        if pd.isnull(results.get(key)):
-                            print("null generated: " + key)
-                            flag = False
+    cadence = step_count / duration
 
-                    if flag:
-                        walking_data.append(results)
+    df_steps["step_time"] = df_steps.index.to_series().diff().astype('timedelta64[ms]')
+    df_steps["step_time"] = np.where((df_steps["step_time"] < 2000), df_steps["step_time"], -1)
+    df_steps["step_time"].fillna((-1), inplace=True)
 
-    return walking_data
+    average_step_time = df_steps[df_steps["step_time"] > 0]["step_time"].mean() / 1000
+    step_time_std_dev = df_steps[df_steps["step_time"] > 0]["step_time"].std() / 1000
+    step_time_skew = df_steps[df_steps["step_time"] > 0]["step_time"].skew()
+    step_time_kurtosis = df_steps[df_steps["step_time"] > 0]["step_time"].kurtosis()
+
+    signal_mean = df["Accel_mag"].mean()
+    signal_std_dev = df["Accel_mag"].std()
+    signal_skewness = df["Accel_mag"].skew()
+    signal_kurtosis = df["Accel_mag"].kurtosis()
+
+    steps_mean = df_steps["Accel_mag"].mean()
+    steps_std_dev = df_steps["Accel_mag"].std()
+    steps_skewness = df_steps["Accel_mag"].skew()
+    steps_kurtosis = df_steps["Accel_mag"].kurtosis()
+
+    results = {"duration": duration,
+               "step_count": step_count,
+               "cadence": cadence,
+               "step_time": average_step_time,
+               "step_time_std_dev": step_time_std_dev,
+               "step_time_skew": step_time_skew,
+               "step_time_kurtosis": step_time_kurtosis,
+               "gait_stretch": average_gait_stretch,
+               "signal_mean": signal_mean,
+               "signal_std_dev": signal_std_dev,
+               "signal_skewness": signal_skewness,
+               "signal_kurtosis": signal_kurtosis,
+               "gs_skew": gs_skew,
+               "gs_kurtosis": gs_kurtosis,
+               "gs_std_dev": gs_std_dev,
+               "steps_mean": steps_mean,
+               "steps_std_dev": steps_std_dev,
+               "steps_skewness": steps_skewness,
+               "steps_kurtosis": steps_kurtosis,
+               "anti_mag_mean": anti_mag_mean,
+               "anti_mag_std_dev": anti_mag_std_dev,
+               "anti_mag_skewness": anti_mag_skewness,
+               "anti_mag_kurtosis": anti_mag_kurtosis}
+
+    for key in freq_stats.keys():
+        results[key] = freq_stats[key]
+
+    general_stats = get_df_general_features(df)
+    for key in general_stats:
+        results[key] = general_stats[key]
+
+    flag = True
+    for key in results.keys():
+        if pd.isnull(results.get(key)):
+            print("null generated: " + key)
+            flag = False
+
+    if flag:
+        return results
+    else:
+        return None
 
 
 # Metod to extract frequency domain features from walking data
