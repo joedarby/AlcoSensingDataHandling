@@ -9,6 +9,8 @@ from pymongo import MongoClient
 import sys
 import os
 import traceback
+import urllib.request
+import json
 
 from pprint import pprint
 
@@ -25,9 +27,8 @@ def generate_features(sd, prt):
     sd_val = sd
     global prt_val
     prt_val = prt
-    db.sensingperiods.update({}, {"$unset": {"features": 1}}, multi=True)
+    #db.sensingperiods.update({}, {"$unset": {"features": 1}}, multi=True)
     periods = db.sensingperiods.find({"$and": [{"completeMotionData": True}, {"completeLocationData": True}]})
-
     pool = Pool()
     pool.map(get_stats_wrapped, periods)
     pool.close()
@@ -35,10 +36,13 @@ def generate_features(sd, prt):
 
 
 
+
 # Try/except wrapper for get_stats
 def get_stats_wrapped(period):
     try:
-        get_stats_for_period(period)
+        #update_walking_stats_for_period(period)
+        #update_location_stats_for_period(period)
+        print(period["features"])
 
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
@@ -49,29 +53,81 @@ def get_stats_wrapped(period):
 
 # Method to generate gait analysis data from a given sensing period. Used by generate_features. Updates gait
 # analysis data into the db
-def get_stats_for_period(sensing_period):
+def update_walking_stats_for_period(sensing_period):
     s_period_id = sensing_period["_id"]
-    raw_dataframe = Data_Tools.get_with_location(db, s_period_id)
+    raw_dataframe = Data_Tools.get_accel_and_motion(db, s_period_id)
     walking_dfs = Data_Tools.split_out_walking_periods(raw_dataframe)
     filtered_dfs = Data_Tools.filter_walking_periods(walking_dfs, sd_val)
 
     sub_period_features = []
     for df in filtered_dfs:
         gait_stats = Data_Tools.get_walking_statistics(df, prt_val)
-        if gait_stats is not None:
-            location_stats = Data_Tools.get_location_statistics(df)
-            if location_stats is not None:
-                sub_period_features.append((gait_stats, location_stats))
+        sub_period_features.append(gait_stats)
 
     features = {}
     for i, stats in enumerate(sub_period_features):
         sub_period_string = "sub_period_" + str(i)
         features[sub_period_string] = {}
-        features[sub_period_string]["gait"] = stats[0]
-        features[sub_period_string]["location"] = stats[1]
+        features[sub_period_string]["gait"] = stats
 
     db.sensingperiods.update_one({"_id": s_period_id}, {"$set": {"features": features}}, upsert=False)
     print("period processed")
+
+
+def update_location_stats_for_period(sensingperiod):
+
+    sp_list = sensingperiod["features"]
+    s_period_id = sensingperiod["_id"]
+    for subperiod in sp_list.keys():
+        url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?key=AIzaSyBjVV-7RA3ei27KRvBRHP20RDL9dKsJLXk&radius=50&location="
+        data = sp_list.get(subperiod)
+        start = data["gait"]["start"]
+        raw_dataframe = Data_Tools.get_subperiod_location(db, s_period_id, start)
+        if len(raw_dataframe.index) > 0:
+            lat = raw_dataframe.head(1)["Location_lat"][0]
+            long = raw_dataframe.head(1)["Location_long"][0]
+            #print(lat, long)
+        else:
+            df = Data_Tools.get_file_as_df(db, s_period_id, "Location")
+            lat = df.tail(1)["Location_lat"][0]
+            long = df.tail(1)["Location_long"][0]
+            #print(lat, long)
+
+        url = url + str(lat) + "," + str(long)
+        request = urllib.request.urlopen(url)
+        response = request.read()
+        encoding = request.info().get_content_charset('utf-8')
+        data = json.loads(response.decode(encoding))
+
+        place_results = data["results"]
+        bar_nearby = False
+        night_club_nearby = False
+        restaurant_nearby = False
+        for place in place_results:
+            types = place["types"]
+            if "bar" in types:
+                bar_nearby = True
+            elif "restaurant" in types:
+                restaurant_nearby = True
+            elif "night_club" in types:
+                night_club_nearby = True
+
+        location_features = {"bar_nearby": bar_nearby,
+                    "night_club_nearby": night_club_nearby,
+                    "restaurant_nearby": restaurant_nearby}
+
+        db_string = "features." + subperiod + ".location"
+        print(location_features)
+
+        db.sensingperiods.update_one({"_id": s_period_id}, {"$set": {db_string: location_features}}, upsert=False)
+
+
+
+
+
+
+
+
 
 
 

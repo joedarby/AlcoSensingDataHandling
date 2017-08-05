@@ -64,8 +64,8 @@ def run_model(i):
                            "power_ratio",
                            "SNR",
                            "THD",
-                           #"day_of_week",
-                           #"time"
+                           "day_of_week",
+                           "time"
                          ]
 
 

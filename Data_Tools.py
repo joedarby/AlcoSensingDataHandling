@@ -8,9 +8,10 @@ from scipy.signal import welch
 
 import Charts
 import time
+import traceback
 
-def get_file_as_df(db, sensingPeriod, sensor):
-    file_id = sensingPeriod + "-" + sensor
+def get_file_as_df(db, sensing_period_ID, sensor):
+    file_id = sensing_period_ID + "-" + sensor
     record = db.data.find_one({"_id":file_id})
     file_path = record["filePath"]
     try:
@@ -48,11 +49,13 @@ def get_file_as_df(db, sensingPeriod, sensor):
         return df
 
     except Exception as ex:
+        traceback.print_tb(ex.__traceback__)
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
         message = template.format(type(ex).__name__, ex.args)
         print(message)
         print(file_path)
         print (sensor + " empty")
+
 
         return None
 
@@ -91,6 +94,15 @@ def get_with_location(db, sensingPeriod):
     main_df["Location_lat"].fillna(method='bfill', inplace=True)
     main_df["Location_long"].fillna(method='bfill', inplace=True)
     return main_df
+
+def get_subperiod_location(db, sensingperiod, start):
+    df = get_file_as_df(db, sensingperiod, "Location")
+    df["Location_lat"].fillna(method='ffill', inplace=True)
+    df["Location_long"].fillna(method='ffill', inplace=True)
+    df["Location_lat"].fillna(method='bfill', inplace=True)
+    df["Location_long"].fillna(method='bfill', inplace=True)
+    df = df[start:]
+    return df
 
 
 # For a given sensing period, get accelerometer data only
@@ -183,6 +195,8 @@ def get_walking_statistics(df, prt):
     freq_stats = get_walking_frequency_stats(df, prt)
 
     df = label_anti_steps(df)
+    start = df.head(1).index[0]
+    end = df.tail(1).index[0]
 
     if 'anti_step' in df:
         df_anti = df[df["anti_step"] == True]
@@ -230,7 +244,9 @@ def get_walking_statistics(df, prt):
     steps_skewness = df_steps["Accel_mag"].skew()
     steps_kurtosis = df_steps["Accel_mag"].kurtosis()
 
-    results = {"duration": duration,
+    results = {"start": start,
+               "end": end,
+               "duration": duration,
                "step_count": step_count,
                "cadence": cadence,
                "step_time": average_step_time,
@@ -274,14 +290,15 @@ def get_walking_statistics(df, prt):
         return None
 
 def get_location_statistics(df):
-    #df = df.apply(lambda row: test(row))
-    #print(df)
+    df = df.apply(lambda row: test(row), axis=1)
+    print("location")
     return "blah"
 
 
 def test(row):
     row["result"] = row["Location_lat"] * row["Location_long"]
-    time.sleep(3)
+    #time.sleep(3)
+    #print(row)
     return row
 
 
