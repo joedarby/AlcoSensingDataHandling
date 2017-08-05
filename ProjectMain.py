@@ -10,7 +10,6 @@ import Gait_Analysis
 
 def main():
     print(cpu_count())
-    results = []
     for prt in range(6, 7):
         #Gait_Analysis.generate_features(1.3, prt)
         pool = Pool()
@@ -30,7 +29,6 @@ def main():
         print("std dev = " + str(std_dev_of_accuracy))
         #results.append((prt, overall_accuracy))
 
-    print(results)
 
 
 
@@ -38,6 +36,7 @@ def main():
 def run_model(i):
     dbClient = MongoClient()
     db = dbClient.alcosensing
+
 
     selected_features = ["cadence",
                            "step_time",
@@ -65,8 +64,26 @@ def run_model(i):
                            "SNR",
                            "THD",
                            "day_of_week",
-                           "time"
+                           "time",
+                            "bar_nearby",
+                            #"night_club_nearby",
+                         #"restaurant_nearby"
+                         "audio_mean",
+                        "audio_std_dev",
+                        #"audio_skewness",
+                        #-"audio_kurtosis",
+                        "audio_max",
+                        #"audio_min",
+                        #"audio_range",
+                        "audio_median",
+                          #"audio_total_power",
+                         "audio_power_ratio",
+                         # "audio_SNR",
+                         #"audio_THD"
+
                          ]
+
+
 
 
     training_data, validation_data = Gait_Analysis.sample_data(db)

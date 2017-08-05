@@ -28,7 +28,9 @@ def generate_features(sd, prt):
     global prt_val
     prt_val = prt
     #db.sensingperiods.update({}, {"$unset": {"features": 1}}, multi=True)
-    periods = db.sensingperiods.find({"$and": [{"completeMotionData": True}, {"completeLocationData": True}]})
+    periods = db.sensingperiods.find({"$and": [{"completeMotionData": True}, {"completeLocationData": True}, {"completeAudioData": True}]})
+    #for p in periods:
+    #    update_audio_stats_for_period(p)
     pool = Pool()
     pool.map(get_stats_wrapped, periods)
     pool.close()
@@ -42,7 +44,8 @@ def get_stats_wrapped(period):
     try:
         #update_walking_stats_for_period(period)
         #update_location_stats_for_period(period)
-        print(period["features"])
+        update_audio_stats_for_period(period)
+        #print(period["features"])
 
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
@@ -79,56 +82,36 @@ def update_location_stats_for_period(sensingperiod):
     sp_list = sensingperiod["features"]
     s_period_id = sensingperiod["_id"]
     for subperiod in sp_list.keys():
-        url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?key=AIzaSyBjVV-7RA3ei27KRvBRHP20RDL9dKsJLXk&radius=50&location="
+
         data = sp_list.get(subperiod)
         start = data["gait"]["start"]
         raw_dataframe = Data_Tools.get_subperiod_location(db, s_period_id, start)
-        if len(raw_dataframe.index) > 0:
-            lat = raw_dataframe.head(1)["Location_lat"][0]
-            long = raw_dataframe.head(1)["Location_long"][0]
-            #print(lat, long)
-        else:
-            df = Data_Tools.get_file_as_df(db, s_period_id, "Location")
-            lat = df.tail(1)["Location_lat"][0]
-            long = df.tail(1)["Location_long"][0]
-            #print(lat, long)
-
-        url = url + str(lat) + "," + str(long)
-        request = urllib.request.urlopen(url)
-        response = request.read()
-        encoding = request.info().get_content_charset('utf-8')
-        data = json.loads(response.decode(encoding))
-
-        place_results = data["results"]
-        bar_nearby = False
-        night_club_nearby = False
-        restaurant_nearby = False
-        for place in place_results:
-            types = place["types"]
-            if "bar" in types:
-                bar_nearby = True
-            elif "restaurant" in types:
-                restaurant_nearby = True
-            elif "night_club" in types:
-                night_club_nearby = True
-
-        location_features = {"bar_nearby": bar_nearby,
-                    "night_club_nearby": night_club_nearby,
-                    "restaurant_nearby": restaurant_nearby}
+        location_features = Data_Tools.get_location_features(db, s_period_id, raw_dataframe)
 
         db_string = "features." + subperiod + ".location"
         print(location_features)
 
         db.sensingperiods.update_one({"_id": s_period_id}, {"$set": {db_string: location_features}}, upsert=False)
 
+def update_audio_stats_for_period(sensingperiod):
+    sp_list = sensingperiod["features"]
+    s_period_id = sensingperiod["_id"]
 
+    for subperiod in sp_list.keys():
 
+        data = sp_list.get(subperiod)
+        start = data["gait"]["start"]
+        end = data["gait"]["end"]
 
+        raw_dataframe = Data_Tools.get_subperiod_audio(db, s_period_id, start, end)
+        audio_features = Data_Tools.get_audio_features(raw_dataframe)
 
+        db_string = "features." + subperiod + ".audio"
+        print(audio_features)
 
+        db.sensingperiods.update_one({"_id": s_period_id}, {"$set": {db_string: audio_features}}, upsert=False)
 
-
-
+    print("period processed")
 
 
 # Method to take a random split of valid and pre-generated gait analysis data, splitting into training data
@@ -139,7 +122,7 @@ def sample_data(db):
     validation_periods = []
     all_data = []
     #periods = db.sensingperiods.find({"completeMotionData": True})
-    periods = db.sensingperiods.find({"$and":[{"completeMotionData": True}, {"completeLocationData":True}]})
+    periods = db.sensingperiods.find({"$and":[{"completeMotionData": True}, {"completeLocationData":True}, {"completeAudioData": True}]})
     for period in periods:
         if "features" in period.keys():
             for subperiod in period["features"].keys():
@@ -162,8 +145,12 @@ def generate_model_inputs(data, selected_features):
         period = d[0]
         subperiod_data = d[1]
         gait = subperiod_data["gait"]
+        location = subperiod_data["location"]
+        audio = subperiod_data["audio"]
         all_stats = {}
         all_stats.update(gait)
+        all_stats.update(location)
+        all_stats.update(audio)
 
         survey = period["survey"]
         if survey is not None:

@@ -5,9 +5,9 @@ import numpy as np
 import pandas as pd
 from scipy.integrate import simps
 from scipy.signal import welch
+import urllib.request
+import json
 
-import Charts
-import time
 import traceback
 
 def get_file_as_df(db, sensing_period_ID, sensor):
@@ -104,6 +104,14 @@ def get_subperiod_location(db, sensingperiod, start):
     df = df[start:]
     return df
 
+def get_subperiod_audio(db, sensingperiod, start, end):
+    df = get_file_as_df(db, sensingperiod, "Audio")
+    df = df[~df.index.duplicated(keep='first')]
+    df.sort_index(inplace=True)
+    df = df[start:end]
+    #Charts.plot_general(df, "Audio")
+    return df
+
 
 # For a given sensing period, get accelerometer data only
 def get_accelerometer(db, sensingPeriod):
@@ -192,7 +200,7 @@ def filter_walking_periods(dfs, sd):
 
 
 def get_walking_statistics(df, prt):
-    freq_stats = get_walking_frequency_stats(df, prt)
+    freq_stats = get_frequency_domain_features(df["Accel_mag"], prt, 7)
 
     df = label_anti_steps(df)
     start = df.head(1).index[0]
@@ -289,24 +297,80 @@ def get_walking_statistics(df, prt):
     else:
         return None
 
-def get_location_statistics(df):
-    df = df.apply(lambda row: test(row), axis=1)
-    print("location")
-    return "blah"
+def get_location_features(db, s_period_id, df):
+    if len(df.index) > 0:
+        lat = df.head(1)["Location_lat"][0]
+        long = df.head(1)["Location_long"][0]
+        # print(lat, long)
+    else:
+        df = get_file_as_df(db, s_period_id, "Location")
+        lat = df.tail(1)["Location_lat"][0]
+        long = df.tail(1)["Location_long"][0]
+        # print(lat, long)
+
+    url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?key=AIzaSyBjVV-7RA3ei27KRvBRHP20RDL9dKsJLXk&radius=50&location="
+
+    url = url + str(lat) + "," + str(long)
+    request = urllib.request.urlopen(url)
+    response = request.read()
+    encoding = request.info().get_content_charset('utf-8')
+    data = json.loads(response.decode(encoding))
+
+    place_results = data["results"]
+    bar_nearby = False
+    night_club_nearby = False
+    restaurant_nearby = False
+    for place in place_results:
+        types = place["types"]
+        if "bar" in types:
+            bar_nearby = True
+        elif "restaurant" in types:
+            restaurant_nearby = True
+        elif "night_club" in types:
+            night_club_nearby = True
+
+    location_features = {"bar_nearby": bar_nearby,
+                         "night_club_nearby": night_club_nearby,
+                         "restaurant_nearby": restaurant_nearby}
+
+    return location_features
 
 
-def test(row):
-    row["result"] = row["Location_lat"] * row["Location_long"]
-    #time.sleep(3)
-    #print(row)
-    return row
+def get_audio_features(df):
+    audio_data = df["Audio"]
+
+    mean = audio_data.mean()
+    std_dev = audio_data.std()
+    skewness = audio_data.skew()
+    kurtosis = audio_data.kurtosis()
+    max = audio_data.max().item()
+    min = audio_data.min().item()
+    rng = max - min
+    median = audio_data.median()
+
+    audio_features = {
+        "audio_mean": mean,
+        "audio_std_dev": std_dev,
+        "audio_skewness": skewness,
+        "audio_kurtosis": kurtosis,
+        "audio_max": max,
+        "audio_min": min,
+        "audio_range": rng,
+        "audio_median": median
+    }
+
+    freq_stats = get_frequency_domain_features(df, 1.3, 4)
+
+    audio_features["audio_total_power"] = freq_stats["total_power"]
+    audio_features["audio_power_ratio"] = freq_stats["power_ratio"]
+    audio_features["audio_SNR"] = freq_stats["SNR"]
+    audio_features["audio_THD"] = freq_stats["THD"]
+
+    return audio_features
 
 
-
-
-# Metod to extract frequency domain features from walking data
-def get_walking_frequency_stats(df, prt):
-    df = df["Accel_mag"]
+# Method to extract frequency domain features from walking data
+def get_frequency_domain_features(df, prt, harmonic_limit):
     #clean up and resample df to give evenly spaced samples (required for DFT)
     df = df[~df.index.duplicated(keep='first')]
     df = df.resample('ms').interpolate()
@@ -335,7 +399,7 @@ def get_walking_frequency_stats(df, prt):
     power_ratio = high_freq_power / low_freq_power
 
     fundamental_freq = df.loc[df["power"].argmax()]["frequency"]
-    harmonics = [fundamental_freq * i for i in range(1,7)]
+    harmonics = [fundamental_freq * i for i in range(1,harmonic_limit)]
     df["S_or_N"] = df["frequency"].apply(lambda x: x in harmonics)
     signal_power = df[df["S_or_N"] == True]["power"].sum()
     noise_power = df[df["S_or_N"] == False]["power"].sum()
@@ -343,7 +407,7 @@ def get_walking_frequency_stats(df, prt):
 
     harmonic_powers = df[df["S_or_N"] == True]["power"].as_matrix()
     sum_sq_harmonic_power = 0
-    for i in range(1,6):
+    for i in range(1,(harmonic_limit -1)):
         sum_sq_harmonic_power += (harmonic_powers[i]**2)
     THD = (sqrt(sum_sq_harmonic_power)) / harmonic_powers[0]
 
