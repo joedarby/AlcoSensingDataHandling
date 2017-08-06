@@ -29,7 +29,7 @@ def get_file_as_df(db, sensing_period_ID, sensor):
                           "Battery_plugged", "Battery_status", "Battery_health"]
 
         elif sensor == 'Gyroscope':
-            df.columns = ["Gyro_x (rad/s)", "Gyro_y (rad/s)", "Gyro_z (rad/s"]
+            df.columns = ["Gyro_x (rad/s)", "Gyro_y (rad/s)", "Gyro_z (rad/s)"]
 
         elif sensor == 'Location':
             df.columns = ["Location_lat", "Location_long", "Location_altitude", "Location_accuracy"]
@@ -111,6 +111,104 @@ def get_subperiod_audio(db, sensingperiod, start, end):
     df = df[start:end]
     #Charts.plot_general(df, "Audio")
     return df
+
+def get_sub_period_screen(db, sensingperiod, start, end):
+    df = get_file_as_df(db, sensingperiod, "ScreenStatus")
+    df["Screen_status"].fillna(method='ffill', inplace=True)
+    df = df["Screen_status"]
+    df = df[~df.index.duplicated(keep='first')]
+    df.sort_index(inplace=True)
+
+    prev_df = df[:start]
+    prev_row = prev_df.tail(1).squeeze()
+
+    next_df = df[end:]
+    next_row = next_df.head(1).squeeze()
+
+    df = df[start:end]
+
+
+    if len(prev_df.index) > 0:
+        df.loc[start] = prev_row
+
+    if len(prev_df.index) == 0:
+        if len(df.index) > 0:
+            later_status = df.iloc[0]
+        elif len(next_df.index) > 0:
+            later_status = next_row
+        if later_status == 2 or later_status == 0:
+            df.loc[start] = 1
+        else:
+            df.loc[start] = 0
+
+    df.loc[end] = -1
+
+    df.sort_index(inplace=True)
+
+    df = pd.DataFrame(df, columns=[df.name])
+    df["time"] = df.index
+    df["duration"] = (df["time"].shift(periods=-1) - df["time"]).astype('timedelta64[ns]')
+
+
+    df = df[:-1]
+
+    df["duration"] = df["duration"].astype(int) / 1e9
+
+    return df
+
+
+def get_screen_features(df, start, end):
+
+    duration = end - start
+    duration_on = 0
+    duration_off = 0
+
+    mean_on_duration = 0.0
+    mean_off_duration = 0.0
+
+    switches_on = 0
+    switches_off = 0
+    unlocks = 0
+
+    on_periods = df[(df["Screen_status"] == 1) | (df["Screen_status"] == 2)]
+    off_periods = df[df["Screen_status"] == 0]
+
+    if len(on_periods) > 0:
+        duration_on = on_periods["duration"].sum()
+        mean_on_duration = on_periods["duration"].mean()
+
+    if len(off_periods) > 0:
+        duration_off = off_periods["duration"].sum()
+        mean_off_duration = off_periods["duration"].mean()
+
+    duration_secs = duration.total_seconds()
+
+    proportion_on = duration_on / duration_secs
+    proportion_off = duration_off / duration_secs
+
+    df_after_start = df[1:]
+    if len(df_after_start.index) > 0:
+        counts = df_after_start["Screen_status"].value_counts()
+        if 0 in counts.keys():
+            switches_off += counts[0]
+        if 1 in counts.keys():
+            switches_on += counts[1]
+        if 2 in counts.keys():
+            unlocks += counts[2]
+
+    features = {"screen_on_proportion": proportion_on,
+                "screen_switches_on": switches_on/1.0,
+                "screen_switches_off": switches_off/1.0,
+                "screen_unlocks": unlocks/1.0,
+                "screen_mean_on_duration": mean_on_duration,
+                "screen_mean_off_duration": mean_off_duration,
+                "screen_unlocks_over_time": unlocks / duration_secs,
+                "screen_switches_on_over_time": switches_on / duration_secs,
+                "screen_switches_off_over_time": switches_off / duration_secs,
+                "screen_changes_over_time": (switches_off+switches_on+unlocks) / duration_secs}
+
+    return features
+
 
 
 # For a given sensing period, get accelerometer data only

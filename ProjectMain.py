@@ -13,7 +13,7 @@ def main():
     for prt in range(6, 7):
         #Gait_Analysis.generate_features(1.3, prt)
         pool = Pool()
-        mean_accuracies = pool.map(run_model, range(300))
+        mean_accuracies = pool.map(run_model, range(30))
         pool.close()
         pool.join()
 
@@ -38,7 +38,8 @@ def run_model(i):
     db = dbClient.alcosensing
 
 
-    selected_features = ["cadence",
+    selected_features = [ #"duration",
+                            "cadence",
                            "step_time",
                            "step_time_std_dev",
                            "step_time_skew",
@@ -79,12 +80,19 @@ def run_model(i):
                           #"audio_total_power",
                          "audio_power_ratio",
                          # "audio_SNR",
-                         #"audio_THD"
+                         #"audio_THD",
+                         # "screen_on_proportion",
+                         # "screen_switches_on",
+                         # "screen_switches_off",
+                         # "screen_unlocks",
+                         # "screen_mean_on_duration",
+                         # "screen_mean_off_duration",
+                         #"screen_unlocks_over_time",
+                         # "screen_switches_on_over_time",
+                         # "screen_switches_off_over_time",
+                         #"screen_changes_over_time"
 
                          ]
-
-
-
 
     training_data, validation_data = Gait_Analysis.sample_data(db)
     training_features, training_targets = Gait_Analysis.generate_model_inputs(training_data, selected_features)

@@ -1,8 +1,10 @@
 import json
 import os
 from pprint import pprint
+from pymongo import MongoClient
 import gzip
 import csv
+
 
 DIRECTORY = "/home/joe/dev/MSc/data/"
 
@@ -104,44 +106,52 @@ def insert_drink_rating(db):
                 db.sensingperiods.update_one({"_id": periodID}, {"$set": {"survey.drinkRating": drinkRating}}, upsert=False)
 
 
-def check_data_complete(db):
+def check_data_complete(period):
     path = DIRECTORY
-    for period in db.sensingperiods.find():
-        periodID = period["_id"]
-        user = period["user"]
-        time = period["startTime"]
-        #if "completeData" not in period.keys():
-        if True:
-            directory = path + user + "/" + time
-            list = os.listdir(directory)
-            dataOK = filesOK(list, directory)
-            motionDataOK, locationDataOK, audioOK = motionFilesOK(list, directory)
-            if dataOK:
-                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeData": True}},
-                                             upsert=False)
-            else:
-                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeData": False}},
-                                             upsert=False)
-            if motionDataOK:
-                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeMotionData": True}},
-                                             upsert=False)
-            else:
-                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeMotionData": False}},
-                                             upsert=False)
-            if locationDataOK:
-                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeLocationData": True}},
-                                             upsert=False)
-            else:
-                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeLocationData": False}},
-                                             upsert=False)
-            if audioOK:
-                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeAudioData": True}},
-                                             upsert=False)
-            else:
-                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeAudioData": False}},
-                                             upsert=False)
-            period = db.sensingperiods.find_one({"_id":periodID})
-            print(periodID, dataOK, period["completeData"], period["completeMotionData"], period["completeLocationData"], period["completeAudioData"])
+    dbClient = MongoClient()
+    db = dbClient.alcosensing
+
+    periodID = period["_id"]
+    user = period["user"]
+    time = period["startTime"]
+    #if "completeData" not in period.keys():
+    if True:
+        directory = path + user + "/" + time
+        list = os.listdir(directory)
+        dataOK = filesOK(list, directory)
+        motionDataOK, locationDataOK, audioOK, screenOK = sensorFilesOK(list, directory)
+        if dataOK:
+            db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeData": True}},
+                                         upsert=False)
+        else:
+            db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeData": False}},
+                                         upsert=False)
+        if motionDataOK:
+            db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeMotionData": True}},
+                                         upsert=False)
+        else:
+            db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeMotionData": False}},
+                                         upsert=False)
+        if locationDataOK:
+            db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeLocationData": True}},
+                                         upsert=False)
+        else:
+            db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeLocationData": False}},
+                                         upsert=False)
+        if audioOK:
+            db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeAudioData": True}},
+                                         upsert=False)
+        else:
+            db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeAudioData": False}},
+                                         upsert=False)
+        if screenOK:
+            db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeScreenData": True}},
+                                         upsert=False)
+        else:
+            db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeScreenData": False}},
+                                         upsert=False)
+        period = db.sensingperiods.find_one({"_id":periodID})
+        print(periodID, dataOK, period["completeData"], period["completeMotionData"], period["completeLocationData"], period["completeAudioData"], period["completeScreenData"])
 
 def filesOK(list, directory):
     if len(list) < 9:
@@ -155,11 +165,12 @@ def filesOK(list, directory):
                     return False
     return True
 
-def motionFilesOK(list, directory):
+def sensorFilesOK(list, directory):
     accelOK = False
     motionOK = False
     locationOK = False
     audioOK = False
+    screenOK = False
     for file in list:
         filePath = directory + "/" + file
         if "Accelerometer" in file:
@@ -174,8 +185,11 @@ def motionFilesOK(list, directory):
         if "Audio" in file:
             if get_file_length(filePath) > 20:
                 audioOK = True
+        if "ScreenStatus" in file:
+            if get_file_length(filePath) > 20:
+                screenOK = True
 
-    return (motionOK and accelOK), locationOK, audioOK
+    return (motionOK and accelOK), locationOK, audioOK, screenOK
 
 
 

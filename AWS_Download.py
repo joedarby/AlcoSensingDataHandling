@@ -1,8 +1,11 @@
 import boto3
 from pymongo import MongoClient
+from multiprocessing import Pool
 
 import AWS_Tools
 import DB_Tools
+
+
 
 def main():
     s3 = boto3.resource('s3')
@@ -11,19 +14,38 @@ def main():
     dbClient = MongoClient()
     db = dbClient.alcosensing
 
+    '''
 
+    total = db.sensingperiods.find().count()
+    with_motion = db.sensingperiods.find({"completeMotionData" : True}).count()
+    with_location = db.sensingperiods.find({"completeLocationData" : True}).count()
+    with_audio = db.sensingperiods.find({"completeAudioData" : True}).count()
+    with_screen = db.sensingperiods.find({"completeScreenData" : True}).count()
 
+    with_all = db.sensingperiods.find({"$and": [{"completeMotionData" : True},
+                                                {"completeLocationData" : True},
+                                                {"completeAudioData": True},
+                                                {"completeScreenData"}]})
+
+    print(total, with_motion, with_location, with_audio, with_screen, with_all)
+
+    '''
     AWS_Tools.update_users(dataBucket, db)
     #AWS_Tools.check_files(dataBucket)
     AWS_Tools.update_files(dataBucket, db)
     AWS_Tools.update_survey_info(db)
     AWS_Tools.insert_drink_rating(db)
-    AWS_Tools.check_data_complete(db)
+
+    pool = Pool()
+    periods = db.sensingperiods.find()
+    pool.map(AWS_Tools.check_data_complete, periods)
+    pool.close()
+    pool.join()
 
     DB_Tools.print_users(db)
 
-
     DB_Tools.check_surveys(db)
+
 
     '''
 

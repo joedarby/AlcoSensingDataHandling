@@ -28,23 +28,33 @@ def generate_features(sd, prt):
     global prt_val
     prt_val = prt
     #db.sensingperiods.update({}, {"$unset": {"features": 1}}, multi=True)
-    periods = db.sensingperiods.find({"$and": [{"completeMotionData": True}, {"completeLocationData": True}, {"completeAudioData": True}]})
+    periods = db.sensingperiods.find({"$and": [{"completeMotionData": True},
+                                               {"completeLocationData": True},
+                                               {"completeAudioData": True},
+                                               {"completeScreenData": True}]})
+
     #for p in periods:
-    #    update_audio_stats_for_period(p)
+    #    if "features" not in p.keys():
+     #       print("new data")
+     #       update_walking_stats_for_period(p)
+            #update_location_stats_for_period(p)
+            #update_audio_stats_for_period(p)
+
+    #for p in periods:
+    #        update_screen_stats_for_period(p)
     pool = Pool()
     pool.map(get_stats_wrapped, periods)
     pool.close()
     pool.join()
 
 
-
-
 # Try/except wrapper for get_stats
 def get_stats_wrapped(period):
     try:
         #update_walking_stats_for_period(period)
-        #update_location_stats_for_period(period)
+        update_location_stats_for_period(period)
         update_audio_stats_for_period(period)
+        update_screen_stats_for_period(period)
         #print(period["features"])
 
     except Exception as ex:
@@ -113,6 +123,27 @@ def update_audio_stats_for_period(sensingperiod):
 
     print("period processed")
 
+def update_screen_stats_for_period(sensingperiod):
+    sp_list = sensingperiod["features"]
+    s_period_id = sensingperiod["_id"]
+
+    for subperiod in sp_list.keys():
+        data = sp_list.get(subperiod)
+        start = data["gait"]["start"]
+        end = data["gait"]["end"]
+
+        raw_dataframe = Data_Tools.get_sub_period_screen(db, s_period_id, start, end)
+        screen_features = Data_Tools.get_screen_features(raw_dataframe, start, end)
+
+        db_string = "features." + subperiod + ".screen"
+        print(screen_features)
+
+        db.sensingperiods.update_one({"_id": s_period_id}, {"$set": {db_string: screen_features}}, upsert=False)
+
+    print("period processed")
+
+
+
 
 # Method to take a random split of valid and pre-generated gait analysis data, splitting into training data
 # and validation data
@@ -122,7 +153,10 @@ def sample_data(db):
     validation_periods = []
     all_data = []
     #periods = db.sensingperiods.find({"completeMotionData": True})
-    periods = db.sensingperiods.find({"$and":[{"completeMotionData": True}, {"completeLocationData":True}, {"completeAudioData": True}]})
+    periods = db.sensingperiods.find({"$and":[{"completeMotionData": True},
+                                              {"completeLocationData":True},
+                                              {"completeAudioData": True},
+                                              {"completeScreenData": True}]})
     for period in periods:
         if "features" in period.keys():
             for subperiod in period["features"].keys():
@@ -147,10 +181,12 @@ def generate_model_inputs(data, selected_features):
         gait = subperiod_data["gait"]
         location = subperiod_data["location"]
         audio = subperiod_data["audio"]
+        screen = subperiod_data["screen"]
         all_stats = {}
         all_stats.update(gait)
         all_stats.update(location)
         all_stats.update(audio)
+        all_stats.update(screen)
 
         survey = period["survey"]
         if survey is not None:
