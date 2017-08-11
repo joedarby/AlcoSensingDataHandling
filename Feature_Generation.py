@@ -1,18 +1,12 @@
-import random
+import traceback
 from multiprocessing import Pool
+from pprint import pprint
 
 import numpy as np
-import Data_Tools
 import pandas as pd
 from pymongo import MongoClient
 
-import sys
-import os
-import traceback
-import urllib.request
-import json
-
-from pprint import pprint
+import Data_Tools
 
 sd_val = 0
 prt_val = 0
@@ -28,20 +22,16 @@ def generate_features(sd, prt):
     global prt_val
     prt_val = prt
     #db.sensingperiods.update({}, {"$unset": {"features": 1}}, multi=True)
-    periods = db.sensingperiods.find({"$and": [{"completeMotionData": True},
-                                               {"completeLocationData": True},
-                                               {"completeAudioData": True},
-                                               {"completeScreenData": True}]})
+    periods = db.sensingperiods.find({"$and": [
+        {"completeMotionData": True},
+        #{"completeLocationData": True},
+        {"completeAudioData": True},
+        #{"completeScreenData": True},
+        #{"completeBatteryData": True},
+        #{"completeGyroscopeData": True}
+    ]})
 
-    #for p in periods:
-    #    if "features" not in p.keys():
-     #       print("new data")
-     #       update_walking_stats_for_period(p)
-            #update_location_stats_for_period(p)
-            #update_audio_stats_for_period(p)
 
-    #for p in periods:
-    #        update_screen_stats_for_period(p)
     pool = Pool()
     pool.map(get_stats_wrapped, periods)
     pool.close()
@@ -52,10 +42,11 @@ def generate_features(sd, prt):
 def get_stats_wrapped(period):
     try:
         #update_walking_stats_for_period(period)
-        update_location_stats_for_period(period)
+        #update_location_stats_for_period(period)
         update_audio_stats_for_period(period)
-        update_screen_stats_for_period(period)
-        #print(period["features"])
+        #update_screen_stats_for_period(period)
+        #update_battery_stats_for_period(period)
+
 
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
@@ -142,76 +133,45 @@ def update_screen_stats_for_period(sensingperiod):
 
     print("period processed")
 
+def update_battery_stats_for_period(sensingperiod):
+    sp_list = sensingperiod["features"]
+    s_period_id = sensingperiod["_id"]
+
+    for subperiod in sp_list.keys():
+        data = sp_list.get(subperiod)
+        start = data["gait"]["start"]
+        end = data["gait"]["end"]
+
+        raw_dataframe = Data_Tools.get_subperiod_battery(db, s_period_id, start, end)
+        battery_features = Data_Tools.get_battery_features(raw_dataframe)
+
+        db_string = "features." + subperiod + ".battery"
+        print(battery_features)
+
+        db.sensingperiods.update_one({"_id": s_period_id}, {"$set": {db_string: battery_features}}, upsert=False)
 
 
+    print("period processed")
 
-# Method to take a random split of valid and pre-generated gait analysis data, splitting into training data
-# and validation data
-def sample_data(db):
-    PERCENT_VALIDATION = 0.15
-    training_periods = []
-    validation_periods = []
-    all_data = []
-    #periods = db.sensingperiods.find({"completeMotionData": True})
-    periods = db.sensingperiods.find({"$and":[{"completeMotionData": True},
-                                              {"completeLocationData":True},
-                                              {"completeAudioData": True},
-                                              {"completeScreenData": True}]})
-    for period in periods:
-        if "features" in period.keys():
-            for subperiod in period["features"].keys():
-                subperiod_data = period["features"][subperiod]
-                all_data.append((period, subperiod_data))
-    for data in all_data:
-        num = random.uniform(0, 1)
-        if num > PERCENT_VALIDATION:
-            training_periods.append(data)
-        else:
-            validation_periods.append(data)
-    return training_periods, validation_periods
+def update_gyroscope_stats_for_period(sensingperiod):
+    sp_list = sensingperiod["features"]
+    s_period_id = sensingperiod["_id"]
+
+    for subperiod in sp_list.keys():
+        data = sp_list.get(subperiod)
+        start = data["gait"]["start"]
+        end = data["gait"]["end"]
+
+        raw_dataframe = Data_Tools.get_subperiod_gyroscope(db, s_period_id, start, end)
+        #gyroscope_features = Data_Tools.get_gyroscope_features(raw_dataframe)
+
+        #db_string = "features." + subperiod + ".gyroscope"
+        #print(gyroscope_features)
+
+        #db.sensingperiods.update_one({"_id": s_period_id}, {"$set": {db_string: battery_features}}, upsert=False)
 
 
-# Method to take data (at both training and validation stage), as lists of dictionaries, filter the data and return
-# arrays which can be fed into sklearn model
-def generate_model_inputs(data, selected_features):
-    data_list = []
-    for d in data:
-        period = d[0]
-        subperiod_data = d[1]
-        gait = subperiod_data["gait"]
-        location = subperiod_data["location"]
-        audio = subperiod_data["audio"]
-        screen = subperiod_data["screen"]
-        all_stats = {}
-        all_stats.update(gait)
-        all_stats.update(location)
-        all_stats.update(audio)
-        all_stats.update(screen)
-
-        survey = period["survey"]
-        if survey is not None:
-            all_stats["didDrink"] = survey["didDrink"]
-            all_stats["drinkUnits"] = survey["units"]
-            all_stats["drinkFeeling"] = survey["feeling"]
-            all_stats["drinkRating"] = survey["drinkRating"]
-
-            data_list.append(all_stats)
-
-    df = pd.DataFrame(data_list)
-    #print(df)
-
-    df = df[df["cadence"] < 9999]
-    df = df[df["duration"] > 30]
-    df = df[df["step_count"] > 15]
-
-    df["drunk"] = np.where((df["didDrink"] == False), 0, np.where((df["drinkRating"] <= 8), 1,  2))
-
-    #print_summary_statistics(df)
-
-    features = df.as_matrix(selected_features)
-    targets = df.as_matrix(["drunk"]).ravel()
-
-    return features, targets
+    print("period processed")
 
 
 #  Method to print summary stats of gait analysis data
@@ -234,19 +194,27 @@ def print_summary_statistics(df):
 
 
 
-def summarise_data(db):
+def summarise_data():
+    dbClient = MongoClient()
+    global db
+    db = dbClient.alcosensing
     periods = db.sensingperiods.find()
-    total_periods = periods.count()
-    total_with_motion = db.sensingperiods.find({"completeMotionData": True}).count()
+    #total_periods = periods.count()
+    #total_with_motion = db.sensingperiods.find({"completeMotionData": True}).count()
     good = 0
     no_good = 0
     sections = 0
     drunk_sections = 0
     some_drink_sections = 0
     sober_sections = 0
+
+    for period in periods:
+        pprint(period)
+
+    '''
     for period in periods:
         id = period["_id"]
-        print(period)
+        pprint(period)
         if "gait_stats" in period.keys():
             print(id + ": " + str(len(period["gait_stats"])))
             good += 1
@@ -265,10 +233,11 @@ def summarise_data(db):
         else:
             print(id + ": no valid walking sections")
             no_good += 1
-    print(total_periods)
-    print(total_with_motion)
-    print(good, no_good)
-    print(sections, drunk_sections, some_drink_sections, sober_sections)
+    '''
+    #print(total_periods)
+    #print(total_with_motion)
+    #print(good, no_good)
+    #print(sections, drunk_sections, some_drink_sections, sober_sections)
 
 if __name__ == "__main__":
     np.set_printoptions(linewidth=640)
@@ -276,4 +245,4 @@ if __name__ == "__main__":
     pd.set_option('display.width', 1000)
 
     generate_features(1.3, 6)
-    #summarise_data(db)
+    #summarise_data()

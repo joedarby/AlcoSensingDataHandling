@@ -114,12 +114,11 @@ def check_data_complete(period):
     periodID = period["_id"]
     user = period["user"]
     time = period["startTime"]
-    #if "completeData" not in period.keys():
-    if True:
+    if "completeData" not in period.keys():
         directory = path + user + "/" + time
         list = os.listdir(directory)
         dataOK = filesOK(list, directory)
-        motionDataOK, locationDataOK, audioOK, screenOK = sensorFilesOK(list, directory)
+        motionDataOK, locationDataOK, audioOK, screenOK, batteryOK, gyroscopeOK = sensorFilesOK(list, directory)
         if dataOK:
             db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeData": True}},
                                          upsert=False)
@@ -150,8 +149,20 @@ def check_data_complete(period):
         else:
             db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeScreenData": False}},
                                          upsert=False)
+        if batteryOK:
+            db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeBatteryData": True}},
+                                         upsert=False)
+        else:
+            db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeBatteryData": False}},
+                                         upsert=False)
+        if gyroscopeOK:
+            db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeGyroscopeData": True}},
+                                         upsert=False)
+        else:
+            db.sensingperiods.update_one({"_id": periodID}, {"$set": {"completeGyroscopeData": False}},
+                                         upsert=False)
         period = db.sensingperiods.find_one({"_id":periodID})
-        print(periodID, dataOK, period["completeData"], period["completeMotionData"], period["completeLocationData"], period["completeAudioData"], period["completeScreenData"])
+        print(periodID, dataOK, period["completeData"], period["completeMotionData"], period["completeLocationData"], period["completeAudioData"], period["completeScreenData"], period["completeBatteryData"], period["completeGyroscopeData"])
 
 def filesOK(list, directory):
     if len(list) < 9:
@@ -171,6 +182,8 @@ def sensorFilesOK(list, directory):
     locationOK = False
     audioOK = False
     screenOK = False
+    batteryOK = False
+    gyroscopeOK = False
     for file in list:
         filePath = directory + "/" + file
         if "Accelerometer" in file:
@@ -188,8 +201,14 @@ def sensorFilesOK(list, directory):
         if "ScreenStatus" in file:
             if get_file_length(filePath) > 20:
                 screenOK = True
+        if "Battery" in file:
+            if get_file_length(filePath) > 20:
+                batteryOK = True
+        if "Gyroscope" in file:
+            if get_file_length(filePath) > 100:
+                gyroscopeOK = True
 
-    return (motionOK and accelOK), locationOK, audioOK, screenOK
+    return (motionOK and accelOK), locationOK, audioOK, screenOK, batteryOK, gyroscopeOK
 
 
 

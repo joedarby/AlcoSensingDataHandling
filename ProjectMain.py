@@ -5,7 +5,8 @@ from multiprocessing import Pool
 from multiprocessing import cpu_count
 
 import RandomForest
-import Gait_Analysis
+import Feature_Generation
+import Sampling
 
 
 def main():
@@ -13,7 +14,7 @@ def main():
     for prt in range(6, 7):
         #Gait_Analysis.generate_features(1.3, prt)
         pool = Pool()
-        mean_accuracies = pool.map(run_model, range(30))
+        mean_accuracies = pool.map(run_model, range(300))
         pool.close()
         pool.join()
 
@@ -90,14 +91,19 @@ def run_model(i):
                          #"screen_unlocks_over_time",
                          # "screen_switches_on_over_time",
                          # "screen_switches_off_over_time",
-                         #"screen_changes_over_time"
+                         #"screen_changes_over_time",
+                        #"battery_start_pct"
 
                          ]
 
-    training_data, validation_data = Gait_Analysis.sample_data(db)
-    training_features, training_targets = Gait_Analysis.generate_model_inputs(training_data, selected_features)
+    all_data = Sampling.get_from_db(db)
+
+    training_df, validation_df = Sampling.partition_and_label_data(all_data)
+
+    training_features, training_targets = Sampling.get_training_inputs(training_df, selected_features)
     model = RandomForest.fit_forest(training_features, training_targets, selected_features)
-    mean_accuracy = RandomForest.validate_model(model, validation_data, selected_features)
+
+    mean_accuracy = RandomForest.validate_model_new(model, validation_df, selected_features)
     return mean_accuracy
 
 

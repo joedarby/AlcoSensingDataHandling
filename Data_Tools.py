@@ -9,6 +9,7 @@ import urllib.request
 import json
 
 import traceback
+import Charts
 
 def get_file_as_df(db, sensing_period_ID, sensor):
     file_id = sensing_period_ID + "-" + sensor
@@ -95,6 +96,7 @@ def get_with_location(db, sensingPeriod):
     main_df["Location_long"].fillna(method='bfill', inplace=True)
     return main_df
 
+
 def get_subperiod_location(db, sensingperiod, start):
     df = get_file_as_df(db, sensingperiod, "Location")
     df["Location_lat"].fillna(method='ffill', inplace=True)
@@ -104,13 +106,59 @@ def get_subperiod_location(db, sensingperiod, start):
     df = df[start:]
     return df
 
+
 def get_subperiod_audio(db, sensingperiod, start, end):
     df = get_file_as_df(db, sensingperiod, "Audio")
     df = df[~df.index.duplicated(keep='first')]
     df.sort_index(inplace=True)
     df = df[start:end]
-    #Charts.plot_general(df, "Audio")
+    #Charts.plot_audio(df)
     return df
+
+
+def get_subperiod_gyroscope(db, sensingperiod, start, end):
+    df = get_file_as_df(db, sensingperiod, "Gyroscope")
+    df = df[~df.index.duplicated(keep='first')]
+    df.sort_index(inplace=True)
+    #Charts.plot_3_axis_gyro(df)
+    df = df[start:end]
+    Charts.plot_3_axis_gyro(df)
+    Charts.plot_accelerometer_mag(df, "Gyro_x (rad/s)")
+    Charts.plot_accelerometer_mag(df, "Gyro_y (rad/s)")
+    Charts.plot_accelerometer_mag(df, "Gyro_z (rad/s)")
+    return df
+
+
+def get_subperiod_battery(db, sensingperiod, start, end):
+    df = get_file_as_df(db, sensingperiod, "Battery")
+    df = df[~df.index.duplicated(keep='first')]
+    df.sort_index(inplace=True)
+
+    prev_df = df[:start]
+    prev_row = prev_df.tail(1).squeeze()
+
+    next_df = df[end:]
+    next_row = next_df.head(1).squeeze()
+
+    df = df[start:end]
+
+    if len(prev_df.index) > 0:
+        df.loc[prev_row.name] = prev_row
+
+    if len(next_df.index) > 0:
+        df.loc[next_row.name] = next_row
+
+    df.sort_index(inplace=True)
+
+    #Charts.plot_general(df, "Battery_charge (%/100)")
+    return df
+
+def get_battery_features(df):
+    battery_start_pct = df.head(1)["Battery_charge (%/100)"][0]
+
+    features = {"battery_start_pct": battery_start_pct}
+
+    return features
 
 def get_sub_period_screen(db, sensingperiod, start, end):
     df = get_file_as_df(db, sensingperiod, "ScreenStatus")
@@ -222,9 +270,11 @@ def get_accelerometer(db, sensingPeriod):
 def calc_accelerometer_magnitude(df):
     df["sq_rt_sum_sq"] = (df["Accel_x (ms-2)"] **2 + df["Accel_y (ms-2)"] ** 2 + df["Accel_z (ms-2)"] ** 2)**(1/2)
     window = 50
-    df["rolling_avg"] = (pd.rolling_sum(df["sq_rt_sum_sq"], window)) / window
+    df["rolling_avg"] = (df["sq_rt_sum_sq"].rolling(window=window, center=False).sum()) / window
+    #df["rolling_avg"] = (pd.rolling_sum(df["sq_rt_sum_sq"], window)) / window
     df["Accel_mag"] = df["sq_rt_sum_sq"] - df["rolling_avg"]
-    df["Accel_mag_avg"] = (pd.rolling_sum(df["Accel_mag"], window)) / window
+    df["Accel_mag_avg"] = (df["Accel_mag"].rolling(window=window, center=False).sum()) / window
+    #df["Accel_mag_avg"] = (pd.rolling_sum(df["Accel_mag"], window)) / window
 
 
 # For a given sensing period, get motion activity data only
@@ -547,7 +597,8 @@ def label_steps_old(df, sd):
     std_dev_threshold = sd
     df = df.dropna(subset=["Accel_mag"])
     df = df[~df.index.duplicated(keep='first')]
-    df["rolling_std_dev"] = pd.rolling_std(df["Accel_mag"], window=50, min_periods=50)
+    df["rolling_std_dev"] = df["Accel_mag"].rolling(window=50, center=False, min_periods=50).std()
+    #df["rolling_std_dev"] = pd.rolling_std(df["Accel_mag"], window=50, min_periods=50)
     df["step_threshold"] = (df["Accel_mag_avg"] - (std_dev_threshold * df["rolling_std_dev"]))
     df["step"] = (df["Accel_mag"] < df["step_threshold"]) & (df["Accel_mag"] < -magnitude_threshold)
     df = df.apply(lambda row: filter_steps_forward(row, df), axis=1)

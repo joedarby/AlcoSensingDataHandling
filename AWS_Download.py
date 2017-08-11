@@ -14,20 +14,23 @@ def main():
     dbClient = MongoClient()
     db = dbClient.alcosensing
 
-    '''
 
+    '''
     total = db.sensingperiods.find().count()
     with_motion = db.sensingperiods.find({"completeMotionData" : True}).count()
     with_location = db.sensingperiods.find({"completeLocationData" : True}).count()
     with_audio = db.sensingperiods.find({"completeAudioData" : True}).count()
     with_screen = db.sensingperiods.find({"completeScreenData" : True}).count()
+    with_battery = db.sensingperiods.find({"completeBatteryData": True}).count()
+    with_gyroscope = db.sensingperiods.find({"completeGyroscopeData": True}).count()
 
     with_all = db.sensingperiods.find({"$and": [{"completeMotionData" : True},
                                                 {"completeLocationData" : True},
                                                 {"completeAudioData": True},
-                                                {"completeScreenData"}]})
+                                                #{"completeBatteryData": True},
+                                                {"completeGyroscopeData": True}]}).count()
 
-    print(total, with_motion, with_location, with_audio, with_screen, with_all)
+    print(total, with_motion, with_location, with_audio, with_screen, with_battery, with_gyroscope, with_all)
 
     '''
     AWS_Tools.update_users(dataBucket, db)

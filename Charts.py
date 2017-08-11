@@ -28,7 +28,7 @@ def plot_labelled_steps(df):
     plt.show()
 
 
-def plot_general(df, column):
+def plot_accelerometer_mag(df, column):
     times = df.index.values
     vals = df[column].values
 
@@ -36,6 +36,17 @@ def plot_general(df, column):
     plt.title("Raw accelerometer data")
     plt.xlabel("Time")
     plt.ylabel("Acceleration ms^-2")
+    plt.show()
+
+def plot_audio(df):
+    times = df.index.values
+    vals = df["Audio"].values
+
+    plt.plot(times, vals, linewidth=0.5)
+
+    plt.title("Raw audio data")
+    plt.xlabel("Time")
+    plt.ylabel("Audio level")
     plt.show()
 
 
@@ -61,6 +72,23 @@ def plot_3_axis(df):
     plt.title("Raw accelerometer data")
     plt.xlabel("Time")
     plt.ylabel("Acceleration ms^-2")
+    plt.show()
+
+
+def plot_3_axis_gyro(df):
+    times = df.index.values
+    vals_x = df["Gyro_x (rad/s)"]
+    vals_y = df["Gyro_y (rad/s)"]
+    vals_z = df["Gyro_z (rad/s)"]
+    fig, ax = plt.subplots()
+    ax.plot(times, vals_x, label="x", linewidth=0.5)
+    ax.plot(times, vals_y, label="y", linewidth=0.5)
+    ax.plot(times, vals_z, label="z", linewidth=0.5)
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, labels)
+    plt.title("Raw gyroscope data")
+    plt.xlabel("Time")
+    plt.ylabel("Rotation (rad/s)")
     plt.show()
 
 
