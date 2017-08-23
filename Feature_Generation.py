@@ -24,11 +24,11 @@ def generate_features(sd, prt):
     #db.sensingperiods.update({}, {"$unset": {"features": 1}}, multi=True)
     periods = db.sensingperiods.find({"$and": [
         {"completeMotionData": True},
-        #{"completeLocationData": True},
+        {"completeLocationData": True},
         {"completeAudioData": True},
         #{"completeScreenData": True},
         #{"completeBatteryData": True},
-        #{"completeGyroscopeData": True}
+        {"completeGyroscopeData": True}
     ]})
 
 
@@ -43,9 +43,10 @@ def get_stats_wrapped(period):
     try:
         #update_walking_stats_for_period(period)
         #update_location_stats_for_period(period)
-        update_audio_stats_for_period(period)
+        #update_audio_stats_for_period(period)
         #update_screen_stats_for_period(period)
         #update_battery_stats_for_period(period)
+        update_gyroscope_stats_for_period(period)
 
 
     except Exception as ex:
@@ -163,12 +164,12 @@ def update_gyroscope_stats_for_period(sensingperiod):
         end = data["gait"]["end"]
 
         raw_dataframe = Data_Tools.get_subperiod_gyroscope(db, s_period_id, start, end)
-        #gyroscope_features = Data_Tools.get_gyroscope_features(raw_dataframe)
+        gyroscope_features = Data_Tools.get_gyroscope_features(raw_dataframe)
 
-        #db_string = "features." + subperiod + ".gyroscope"
-        #print(gyroscope_features)
+        db_string = "features." + subperiod + ".gyroscope"
+        print(gyroscope_features)
 
-        #db.sensingperiods.update_one({"_id": s_period_id}, {"$set": {db_string: battery_features}}, upsert=False)
+        db.sensingperiods.update_one({"_id": s_period_id}, {"$set": {db_string: gyroscope_features}}, upsert=False)
 
 
     print("period processed")

@@ -122,10 +122,7 @@ def get_subperiod_gyroscope(db, sensingperiod, start, end):
     df.sort_index(inplace=True)
     #Charts.plot_3_axis_gyro(df)
     df = df[start:end]
-    Charts.plot_3_axis_gyro(df)
-    Charts.plot_accelerometer_mag(df, "Gyro_x (rad/s)")
-    Charts.plot_accelerometer_mag(df, "Gyro_y (rad/s)")
-    Charts.plot_accelerometer_mag(df, "Gyro_z (rad/s)")
+    #Charts.plot_3_axis_gyro(df)
     return df
 
 
@@ -692,6 +689,40 @@ def get_df_general_features(df):
         "day_of_week" : day_of_week
     }
     return result
+
+
+def get_gyroscope_features(df):
+    df["Gyro_mag"] = (df["Gyro_x (rad/s)"] **2 + df["Gyro_y (rad/s)"] ** 2 + df["Gyro_z (rad/s)"] ** 2)**(1/2)
+    gyro_data = df["Gyro_mag"]
+
+    mean = gyro_data.mean()
+    std_dev = gyro_data.std()
+    skewness = gyro_data.skew()
+    kurtosis = gyro_data.kurtosis()
+    max = gyro_data.max().item()
+    min = gyro_data.min().item()
+    rng = max - min
+    median = gyro_data.median()
+
+    gyro_features = {
+        "gyro_mean": mean,
+        "gyro_std_dev": std_dev,
+        "gyro_skewness": skewness,
+        "gyro_kurtosis": kurtosis,
+        "gyro_max": max,
+        "gyro_min": min,
+        "gyro_range": rng,
+        "gyro_median": median
+    }
+
+    freq_stats = get_frequency_domain_features(df["Gyro_mag"], 3, 7)
+
+    gyro_features["gyro_total_power"] = freq_stats["total_power"]
+    gyro_features["gyro_power_ratio"] = freq_stats["power_ratio"]
+    gyro_features["gyro_SNR"] = freq_stats["SNR"]
+    gyro_features["gyro_THD"] = freq_stats["THD"]
+
+    return gyro_features
 
 
 

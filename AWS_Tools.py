@@ -3,8 +3,6 @@ import os
 from pprint import pprint
 from pymongo import MongoClient
 import gzip
-import csv
-
 
 DIRECTORY = "/home/joe/dev/MSc/data/"
 
@@ -94,16 +92,17 @@ def update_survey_info(db):
         #pprint(db.sensingperiods.find_one({"_id": period["_id"]}))
         #print("\n")
 
-def insert_drink_rating(db):
+def calculate_combined_intoxication_score(db):
     for period in db.sensingperiods.find():
         periodID = period["_id"]
         if "survey" in period.keys() and period["survey"] is not None:
             survey = period["survey"]
-            if "drinkRating" not in survey.keys():
+            if "CIS" not in survey.keys():
                 units = survey["units"]
                 feeling = survey["feeling"]
-                drinkRating = (units + 1) * (feeling + 1)
-                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"survey.drinkRating": drinkRating}}, upsert=False)
+                CIS = (units + 1) * (feeling + 1)
+                db.sensingperiods.update_one({"_id": periodID}, {"$set": {"survey.CIS": CIS}}, upsert=False)
+                print("CIS updated")
 
 
 def check_data_complete(period):
